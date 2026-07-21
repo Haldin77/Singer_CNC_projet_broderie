@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# G-code généré (sauf les exemples versionnés)
+gcode/*.nc
+!gcode/exemples/
+
+# Fichiers de broderie de travail
+*.dst
+*.pes
+*.exp
+*.jef
+*.vp3
+!postproc/tests/*.dst
+
+# CAO — fichiers de travail SolidWorks
+*.SLDPRT
+*.SLDASM
+*.SLDDRW
+~$*
+
+# Sorties de slicer
+*.gcode
+*.3mf
+
+# Système
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*~

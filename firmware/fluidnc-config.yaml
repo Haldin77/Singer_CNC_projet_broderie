@@ -1,0 +1,153 @@
+// Brodeuse CNC Singer -- configuration FluidNC
+//
+// Materiel :
+//   Controleur  ESP32-WROOM-32 DevKitC 38 broches (CP2102)
+//   Adaptation  74HCT245 pour convertir les sorties 3,3 V en 5 V
+//   Axe Z       Nema 23 3 N.m + driver DM542, alim 48 V
+//   Axes X/Y    Nema 17 + drivers DM320S, alim 24 V
+//
+// ATTENTION -- deux alimentations distinctes sont obligatoires.
+// Les DM320S acceptent 10-30 V et grilleraient en 48 V.
+//
+// Convention de l'axe Z : rotatif, exprime en DEGRES D'ARBRE PRINCIPAL.
+//   1 point de broderie = 360 deg = 1 tour complet de l'arbre.
+//   Le rapport de reduction 2:1 est absorbe par steps_per_mm ci-dessous.
+
+name: "Brodeuse Singer CNC"
+board: "ESP32 DevKitC 38 broches"
+
+stepping:
+  engine: RMT
+  idle_ms: 250
+  # Les DM542/DM320S sont optocouples : il leur faut des impulsions LARGES.
+  # 4 us est un point de depart sur; descends progressivement si tu veux
+  # plus de vitesse, mais des pas manques viennent presque toujours d'ici.
+  pulse_us: 4
+  dir_delay_us: 5
+  disable_delay_us: 0
+
+# --------------------------------------------------------------------------
+# Axes
+# --------------------------------------------------------------------------
+axes:
+  # Un seul signal ENABLE partage par les trois drivers.
+  # Cable en anode commune : le 74HCT245 tire la ligne a la masse pour activer.
+  shared_stepper_disable_pin: gpio.13:low
+
+  # ---- X ---------------------------------------------------------------
+  # Nema 17, 1/16 de pas (3200 pas/tour), poulie GT2 20 dents (40 mm/tour)
+  #   steps_per_mm = 3200 / 40 = 80        -> resolution 0,0125 mm
+  x:
+    steps_per_mm: 80.000
+    max_rate_mm_per_min: 12000.000        # 200 mm/s
+    acceleration_mm_per_sec2: 3000.000    # a monter apres essais (voir docs)
+    max_travel_mm: 130.000                # cadre Brother SA444
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false
+      mpos_mm: 0.000
+      feed_mm_per_min: 300.000
+      seek_mm_per_min: 1500.000
+      settle_ms: 250
+      seek_scaler: 1.100
+      feed_scaler: 1.100
+    motor0:
+      limit_neg_pin: gpio.34:low:pu
+      hard_limits: false
+      pulloff_mm: 2.000
+      standard_stepper:
+        step_pin: gpio.26
+        direction_pin: gpio.16
+
+  # ---- Y ---------------------------------------------------------------
+  y:
+    steps_per_mm: 80.000
+    max_rate_mm_per_min: 12000.000
+    acceleration_mm_per_sec2: 3000.000
+    max_travel_mm: 180.000
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false
+      mpos_mm: 0.000
+      feed_mm_per_min: 300.000
+      seek_mm_per_min: 1500.000
+      settle_ms: 250
+      seek_scaler: 1.100
+      feed_scaler: 1.100
+    motor0:
+      limit_neg_pin: gpio.35:low:pu
+      hard_limits: false
+      pulloff_mm: 2.000
+      standard_stepper:
+        step_pin: gpio.25
+        direction_pin: gpio.27
+
+  # ---- Z (rotatif) -----------------------------------------------------
+  # Nema 23, 1/4 de pas (800 pas/tour moteur), reduction 2:1
+  #   800 x 2 = 1600 pas par tour d'arbre principal
+  #   steps_per_mm = 1600 / 360 = 4,4444 pas par degre
+  #
+  # Pourquoi 1/4 et pas 1/16 : a 400 points/min et 2:1, le moteur tourne a
+  # 800 tr/min. En 1/16 cela ferait 42 700 pas/s. En 1/4 on tombe a
+  # 10 700 pas/s, tres confortable. Z n'a aucun besoin de resolution fine.
+  z:
+    steps_per_mm: 4.4444
+    max_rate_mm_per_min: 216000.000       # 600 deg/s = 600 points/min
+    acceleration_mm_per_sec2: 2000.000    # volant en fonte : montee en vitesse douce
+    max_travel_mm: 10000000.000           # rotation quasi illimitee
+    soft_limits: false
+    homing:
+      # Indexation sur le capteur Hall : amene l'aiguille au point mort haut.
+      # Se fait EN PREMIER, avant tout mouvement du cadre.
+      cycle: 1
+      positive_direction: true
+      mpos_mm: 0.000
+      feed_mm_per_min: 3600.000           # 10 deg/s, lent et precis
+      seek_mm_per_min: 18000.000          # 50 deg/s
+      settle_ms: 500
+      seek_scaler: 1.000
+      feed_scaler: 1.000
+    motor0:
+      # Capteur Hall KY-003 + aimant neodyme 5x2 mm dans la grande poulie.
+      # Sortie a collecteur ouvert -> pull-up interne.
+      limit_pos_pin: gpio.36:low:pu
+      hard_limits: false
+      pulloff_mm: 5.000                   # 5 deg de degagement
+      standard_stepper:
+        step_pin: gpio.17
+        direction_pin: gpio.14
+
+# --------------------------------------------------------------------------
+# Entrees de controle
+# --------------------------------------------------------------------------
+control:
+  # Detecteur de casse-fil : roue libre sur le trajet du fil + capteur.
+  # Cable en arret de securite : si le fil ne defile plus, la machine s'arrete.
+  feed_hold_pin: gpio.39:low:pu
+  # Arret d'urgence
+  reset_pin: gpio.33:low:pu
+  cycle_start_pin: gpio.32:low:pu
+
+# --------------------------------------------------------------------------
+# Carte SD (module SPI optionnel)
+# --------------------------------------------------------------------------
+sdcard:
+  cs_pin: gpio.5
+  card_detect_pin: NO_PIN
+
+spi:
+  miso_pin: gpio.19
+  mosi_pin: gpio.23
+  sck_pin: gpio.18
+
+# --------------------------------------------------------------------------
+# Divers
+# --------------------------------------------------------------------------
+start:
+  must_home: true
+  deactivate_parking: true
+
+# Pas de broche ni de laser sur cette machine.
+# L'entrainement de l'aiguille est un axe de mouvement, pas une broche.
