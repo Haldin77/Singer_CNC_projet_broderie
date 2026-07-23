@@ -53,14 +53,21 @@ axes:
       seek_scaler: 1.100
       feed_scaler: 1.100
     motor0:
-      limit_neg_pin: gpio.34:low:pu
+      # GPIO 4 : possede un vrai pull-up interne (les 34-39 n'en ont PAS
+      # et flottent -- lecon apprise en simulation Wokwi).
+      limit_neg_pin: gpio.4:low:pu
       hard_limits: false
       pulloff_mm: 2.000
       standard_stepper:
         step_pin: gpio.26
         direction_pin: gpio.16
 
-  # ---- Y ---------------------------------------------------------------
+  # ---- Y (portique a DEUX moteurs) -------------------------------------
+  # Le rail Y porte 2 Nema 17, un de chaque cote, pour eviter que le
+  # portique se mette en biais. Leurs 2 drivers DM320S sont cables EN
+  # PARALLELE sur les memes signaux Y step / Y dir : les deux moteurs
+  # bougent toujours ensemble, FluidNC ne voit qu'un seul axe.
+  # (Pas d'auto-equerrage : on regle la perpendicularite mecaniquement.)
   y:
     steps_per_mm: 80.000
     max_rate_mm_per_min: 12000.000
@@ -77,7 +84,7 @@ axes:
       seek_scaler: 1.100
       feed_scaler: 1.100
     motor0:
-      limit_neg_pin: gpio.35:low:pu
+      limit_neg_pin: gpio.21:low:pu
       hard_limits: false
       pulloff_mm: 2.000
       standard_stepper:
@@ -111,8 +118,8 @@ axes:
       feed_scaler: 1.000
     motor0:
       # Capteur Hall KY-003 + aimant neodyme 5x2 mm dans la grande poulie.
-      # Sortie a collecteur ouvert -> pull-up interne.
-      limit_pos_pin: gpio.36:low:pu
+      # Sortie a collecteur ouvert -> pull-up interne (GPIO 22 en possede un).
+      limit_pos_pin: gpio.22:low:pu
       hard_limits: false
       pulloff_mm: 5.000                   # 5 deg de degagement
       standard_stepper:
@@ -125,10 +132,10 @@ axes:
 control:
   # Detecteur de casse-fil : roue libre sur le trajet du fil + capteur.
   # Cable en arret de securite : si le fil ne defile plus, la machine s'arrete.
-  feed_hold_pin: gpio.39:low:pu
-  # Arret d'urgence
+  feed_hold_pin: gpio.32:low:pu
+  # Arret d'urgence (bouton coup-de-poing vers GND)
   reset_pin: gpio.33:low:pu
-  cycle_start_pin: gpio.32:low:pu
+  # Pas de bouton cycle-start dedie : reprise via l'interface web ou un pendant.
 
 # --------------------------------------------------------------------------
 # Carte SD (module SPI optionnel)

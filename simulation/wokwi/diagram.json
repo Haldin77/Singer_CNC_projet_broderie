@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "author": "Haldin77",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+
+    { "type": "wokwi-a4988", "id": "drvZ", "top": -230, "left": 300, "attrs": {} },
+    { "type": "wokwi-a4988", "id": "drvX", "top": -230, "left": 500, "attrs": {} },
+    { "type": "wokwi-a4988", "id": "drvY", "top": -230, "left": 700, "attrs": {} },
+
+    { "type": "wokwi-stepper-motor", "id": "motZ", "top": -430, "left": 300, "attrs": { "size": "23" } },
+    { "type": "wokwi-stepper-motor", "id": "motX", "top": -430, "left": 520, "attrs": { "size": "17" } },
+    { "type": "wokwi-stepper-motor", "id": "motY", "top": -430, "left": 740, "attrs": { "size": "17" } },
+
+    { "type": "wokwi-pushbutton", "id": "swX", "top": 300, "left": 250, "attrs": { "color": "blue", "label": "Fin course X" } },
+    { "type": "wokwi-pushbutton", "id": "swY", "top": 300, "left": 450, "attrs": { "color": "blue", "label": "Fin course Y" } },
+    { "type": "wokwi-pushbutton", "id": "hall", "top": 300, "left": 650, "attrs": { "color": "green", "label": "Hall index Z" } },
+    { "type": "wokwi-pushbutton", "id": "thread", "top": 300, "left": 850, "attrs": { "color": "red", "label": "Casse-fil" } }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "esp:GPIO17", "drvZ:STEP", "gold", [] ],
+    [ "esp:GPIO14", "drvZ:DIR", "gold", [] ],
+    [ "esp:GPIO26", "drvX:STEP", "gold", [] ],
+    [ "esp:GPIO16", "drvX:DIR", "gold", [] ],
+    [ "esp:GPIO25", "drvY:STEP", "gold", [] ],
+    [ "esp:GPIO27", "drvY:DIR", "gold", [] ],
+
+    [ "esp:GPIO13", "drvZ:ENABLE", "orange", [] ],
+    [ "esp:GPIO13", "drvX:ENABLE", "orange", [] ],
+    [ "esp:GPIO13", "drvY:ENABLE", "orange", [] ],
+
+    [ "drvZ:1A", "motZ:A+", "green", [] ],
+    [ "drvZ:1B", "motZ:A-", "green", [] ],
+    [ "drvZ:2A", "motZ:B+", "green", [] ],
+    [ "drvZ:2B", "motZ:B-", "green", [] ],
+    [ "drvX:1A", "motX:A+", "green", [] ],
+    [ "drvX:1B", "motX:A-", "green", [] ],
+    [ "drvX:2A", "motX:B+", "green", [] ],
+    [ "drvX:2B", "motX:B-", "green", [] ],
+    [ "drvY:1A", "motY:A+", "green", [] ],
+    [ "drvY:1B", "motY:A-", "green", [] ],
+    [ "drvY:2A", "motY:B+", "green", [] ],
+    [ "drvY:2B", "motY:B-", "green", [] ],
+
+    [ "esp:5V", "drvZ:VMOT", "red", [] ],
+    [ "esp:5V", "drvX:VMOT", "red", [] ],
+    [ "esp:5V", "drvY:VMOT", "red", [] ],
+    [ "esp:3V3", "drvZ:VDD", "red", [] ],
+    [ "esp:3V3", "drvX:VDD", "red", [] ],
+    [ "esp:3V3", "drvY:VDD", "red", [] ],
+    [ "esp:GND.1", "drvZ:GND", "black", [] ],
+    [ "esp:GND.1", "drvX:GND", "black", [] ],
+    [ "esp:GND.1", "drvY:GND", "black", [] ],
+    [ "drvZ:GND.2", "esp:GND.1", "black", [] ],
+    [ "drvX:GND.2", "esp:GND.1", "black", [] ],
+    [ "drvY:GND.2", "esp:GND.1", "black", [] ],
+
+    [ "esp:GPIO4", "swX:1.l", "blue", [] ],
+    [ "esp:GPIO21", "swY:1.l", "blue", [] ],
+    [ "esp:GPIO22", "hall:1.l", "green", [] ],
+    [ "esp:GPIO32", "thread:1.l", "red", [] ],
+
+    [ "swX:2.l", "esp:GND.1", "black", [] ],
+    [ "swY:2.l", "esp:GND.1", "black", [] ],
+    [ "hall:2.l", "esp:GND.1", "black", [] ],
+    [ "thread:2.l", "esp:GND.1", "black", [] ]
+  ],
+  "dependencies": {}
+}

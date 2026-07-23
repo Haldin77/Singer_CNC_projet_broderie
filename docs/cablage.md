@@ -44,30 +44,36 @@ Le 74HCT245 résout les deux problèmes à la fois :
 
 ### Sorties vers les drivers (via 74HCT245)
 
+Le portique Y a **deux moteurs** (un de chaque côté), donc **quatre drivers** au total. Les deux drivers Y reçoivent les **mêmes signaux**, câblés en parallèle.
+
 | Signal | GPIO | Canal 245 | Destination |
 |---|---|---|---|
 | X step | 26 | A1 → B1 | DM320S X, PUL+ |
 | X dir | 16 | A2 → B2 | DM320S X, DIR+ |
-| Y step | 25 | A3 → B3 | DM320S Y, PUL+ |
-| Y dir | 27 | A4 → B4 | DM320S Y, DIR+ |
+| Y step | 25 | A3 → B3 | **DM320S Y1 + Y2**, PUL+ (parallèle) |
+| Y dir | 27 | A4 → B4 | **DM320S Y1 + Y2**, DIR+ (parallèle) |
 | Z step | 17 | A5 → B5 | DM542, PUL+ |
 | Z dir | 14 | A6 → B6 | DM542, DIR+ |
-| ENABLE partagé | 13 | A7 → B7 | ENA+ des trois drivers |
+| ENABLE X + Z | 13 | A7 → B7 | ENA+ de X et Z |
+| ENABLE Y1 + Y2 | 13 | A8 → B8 | ENA+ de Y1 et Y2 |
 
 Les broches `PUL−`, `DIR−` et `ENA−` de tous les drivers vont à la **masse commune**.
 
+⚠️ **Pourquoi l'ENABLE est réparti sur deux canaux (B7 et B8).** Chaque entrée d'opto tire ~10–15 mA, et le 74HCT245 fournit 35 mA max par sortie. Avec 4 drivers, un seul canal ENABLE dépasserait (~40–60 mA). On alimente donc les canaux A7 et A8 depuis le **même GPIO 13**, et on répartit les 4 ENA+ en deux paires. Idem, prudence, sur Y step/dir : chaque canal pilote 2 optos (~30 mA), c'est dans les clous.
+
 ### Entrées
 
-| Signal | GPIO | Type | Note |
-|---|---|---|---|
-| Fin de course X | 34 | entrée seule | pull-up interne |
-| Fin de course Y | 35 | entrée seule | pull-up interne |
-| Capteur Hall (index Z) | 36 | entrée seule | KY-003, collecteur ouvert |
-| Détecteur casse-fil | 39 | entrée seule | câblé en *feed hold* |
-| Arrêt d'urgence | 33 | E/S | câblé en *reset* |
-| Reprise / cycle start | 32 | E/S | bouton poussoir |
+| Signal | GPIO | Note |
+|---|---|---|
+| Fin de course X | 4 | pull-up interne activé (`:pu`) |
+| Fin de course Y | 21 | pull-up interne activé |
+| Capteur Hall (index Z) | 22 | KY-003, collecteur ouvert |
+| Détecteur casse-fil | 32 | câblé en *feed hold* |
+| Arrêt d'urgence | 33 | câblé en *reset*, bouton vers GND |
 
-Les GPIO **34 à 39 sont en entrée seule** sur l'ESP32 — parfaits pour des capteurs, inutilisables en sortie.
+Reprise (*cycle start*) : via l'interface web FluidNC, pas de bouton dédié.
+
+⚠️ **Pourquoi pas les GPIO 34–39 ?** Ils sont en entrée seule et **sans pull-up interne** : ils flottent et donnent des lectures fantômes (constaté en simulation Wokwi). Les utiliser exigerait des résistances externes de 10 kΩ vers 3,3 V. Les GPIO 4/21/22/32/33 ont un pull-up interne : capteur câblé en deux fils (signal + masse), zéro composant.
 
 ### Carte SD (module SPI optionnel)
 

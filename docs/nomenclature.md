@@ -22,8 +22,10 @@ Dernière mise à jour : 20 juillet 2026
 
 | Pièce | Spécification | État | Prix |
 |---|---|---|---|
-| Moteurs | 3 × Nema 17, arbre 5 mm | ✅ reçu (Leboncoin) | occasion |
+| Moteurs | 3 × Nema 17 (42×42), arbre 5 mm, 1,5–1,8 A, 1,8° | ✅ reçu (Leboncoin) | occasion |
 | Drivers | 3 × Cloudray DM320S, **10–30 V**, 0,3–2,2 A | ✅ reçu (Leboncoin) | occasion |
+
+Montage Y à **deux moteurs** (un par côté du portique), drivers câblés en parallèle. X = 1 moteur, Y = 2 moteurs → 3 Nema 17, 3 DM320S.
 | Poulies | 3 × GT2, 20 dents, alésage 5 mm | 🚚 en route | 7,02 € |
 | Courroie | GT2 ouverte, 5 m, largeur 6 mm, caoutchouc | 🚚 en route | 7,15 € |
 | Clips de fixation | 4 × clips GT2 aluminium | 🚚 en route | 6,48 € |
