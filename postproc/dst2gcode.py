@@ -67,8 +67,15 @@ class MachineConfig:
     # Au-dela, l'aiguille tirerait trop de fil et le point serait laid.
     max_stitch_len: float = 12.7
 
-    # Si un JUMP depasse cette longueur, on signale une coupe de fil conseillee.
-    jump_cut_threshold: float = 25.0
+    # Au-dela de cette longueur, un saut relache la tension du fil via le
+    # servo (axe A) au lieu d'exiger une coupe manuelle. En mm.
+    jump_release_threshold: float = 25.0
+
+    # --- Servo de debrayage de la tension du fil (axe A) ---
+    servo_enabled: bool = True
+    servo_engaged_deg: float = 0.0     # tension serree (broderie)
+    servo_released_deg: float = 90.0   # tension relachee (pendant le saut)
+    servo_settle_s: float = 0.3        # temps de deplacement du servo
 
     # Commande de pause pour les changements de couleur.
     # M0 = pause inconditionnelle, reprise par bouton ou commande.
@@ -95,6 +102,7 @@ class Stats:
     long_stitches_split: int = 0
     out_of_bounds: int = 0
     z_resets: int = 0
+    tension_releases: int = 0
     max_z: float = 0.0
     total_z_turns: float = 0.0
     bbox: list = field(default_factory=lambda: [None, None, None, None])
@@ -171,10 +179,31 @@ class DstToGcode:
             self.z = 0.0
             self.stats.z_resets += 1
 
+    def servo(self, deg: float) -> None:
+        """Commande le servo de tension (axe A) et attend son deplacement."""
+        self.emit("G0 A%.1f" % deg)
+        self.emit("G4 P%.2f" % self.cfg.servo_settle_s)
+
     def move_to(self, x: float, y: float) -> None:
-        """Un saut : deplacement sans piquer. Z ne tourne pas."""
+        """Un saut : deplacement sans piquer. Z ne tourne pas.
+
+        Si le saut est long, on relache la tension du fil avec le servo pour
+        que le fil se devide sans casser, puis on la re-serre.
+        """
+        dist = math.hypot(x - self.x, y - self.y)
+        release = self.cfg.servo_enabled and dist > self.cfg.jump_release_threshold
+
+        if release:
+            self.emit("; saut de %.1f mm -- debrayage de la tension" % dist)
+            self.servo(self.cfg.servo_released_deg)
+            self.stats.tension_releases += 1
+
         self.emit("G0 X%.4f Y%.4f" % (x, y))
         self.maybe_reset_z()
+
+        if release:
+            self.servo(self.cfg.servo_engaged_deg)
+
         self.x, self.y = x, y
         self.stats.jumps += 1
         self.track_bbox(x, y)
@@ -216,6 +245,10 @@ class DstToGcode:
         self.emit("G21")          # millimetres
         self.emit("G90")          # coordonnees absolues
         self.emit("G94")          # feed en unites/min
+        if c.servo_enabled:
+            self.emit("G0 A%.1f ; servo : tension serree au depart"
+                      % c.servo_engaged_deg)
+            self.emit("G4 P%.2f" % c.servo_settle_s)
         self.emit("G0 X0 Y0")     # cadre au centre
         self.emit("")
 
@@ -236,8 +269,12 @@ class DstToGcode:
         def to_mm(cx, cy):
             return cx / 10.0, -cy / 10.0
 
+        stitches = pattern.stitches
+        n = len(stitches)
         first = True
-        for cx, cy, cmd in pattern.stitches:
+        i = 0
+        while i < n:
+            cx, cy, cmd = stitches[i]
             x, y = to_mm(cx, cy)
             base = cmd & 0xFF
 
@@ -247,20 +284,31 @@ class DstToGcode:
                     first = False
                 else:
                     self.split_long_stitch(x, y)
+                i += 1
+                continue
 
-            elif base == pyembroidery.JUMP:
-                dist = math.hypot(x - self.x, y - self.y)
-                if dist > self.cfg.jump_cut_threshold:
-                    self.emit("; saut de %.1f mm -- coupe du fil conseillee" % dist)
-                self.move_to(x, y)
+            if base == pyembroidery.JUMP:
+                # Le DST plafonne chaque saut a 12,1 mm : un long deplacement
+                # est stocke comme une SUITE de sauts. On les regroupe pour ne
+                # faire qu'un seul G0 vers la destination finale, et mesurer la
+                # vraie distance (c'est elle qui decide du debrayage servo).
+                j = i
+                while j < n and (stitches[j][2] & 0xFF) == pyembroidery.JUMP:
+                    j += 1
+                fx, fy, _ = stitches[j - 1]
+                self.move_to(*to_mm(fx, fy))
+                i = j
+                continue
 
-            elif base == pyembroidery.TRIM:
+            if base == pyembroidery.TRIM:
                 self.stats.trims += 1
                 self.emit("; TRIM -- coupe du fil")
                 # Z est a l'arret sur un TRIM : occasion de le remettre a zero.
                 self.maybe_reset_z()
+                i += 1
+                continue
 
-            elif base in (pyembroidery.COLOR_CHANGE, pyembroidery.NEEDLE_SET):
+            if base in (pyembroidery.COLOR_CHANGE, pyembroidery.NEEDLE_SET):
                 self.stats.color_changes += 1
                 self.emit("")
                 self.emit("; ---- CHANGEMENT DE COULEUR #%d" % self.stats.color_changes)
@@ -272,12 +320,18 @@ class DstToGcode:
                 self.stats.z_resets += 1
                 self.emit("G0 X%.4f Y%.4f" % (self.x, self.y))
                 self.emit("")
+                i += 1
+                continue
 
-            elif base == pyembroidery.STOP:
+            if base == pyembroidery.STOP:
                 self.emit("%s ; arret programme" % self.cfg.pause_command)
+                i += 1
+                continue
 
-            elif base == pyembroidery.END:
+            if base == pyembroidery.END:
                 break
+
+            i += 1
 
         self.footer()
         # 1 point = 1 tour d'arbre principal, quels que soient les G92 intermediaires.
@@ -339,6 +393,7 @@ def main() -> int:
     print("  Changements coul. : %d" % s.color_changes)
     print("  Coupes (TRIM)     : %d" % s.trims)
     print("  Points decoupes   : %d" % s.long_stitches_split)
+    print("  Debrayages tension: %d" % s.tension_releases)
     print("  Tours de Z        : %.0f" % s.total_z_turns)
     print("  Remises a zero Z  : %d" % s.z_resets)
     print("  Duree estimee     : %.1f min" % (s.stitches / cfg.stitches_per_minute))

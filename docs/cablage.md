@@ -1,5 +1,11 @@
 # Câblage et brochage
 
+## Schéma d'ensemble
+
+![Schéma électrique](schema-cablage.svg)
+
+Le fichier [`schema-cablage.svg`](schema-cablage.svg) reprend tout le câblage : alimentations, ESP32, 74HCT245, les quatre drivers (dont Y1/Y2 en parallèle) et les capteurs. Ouvre-le dans un navigateur pour le zoom.
+
 ## Architecture
 
 ```
@@ -75,14 +81,28 @@ Reprise (*cycle start*) : via l'interface web FluidNC, pas de bouton dédié.
 
 ⚠️ **Pourquoi pas les GPIO 34–39 ?** Ils sont en entrée seule et **sans pull-up interne** : ils flottent et donnent des lectures fantômes (constaté en simulation Wokwi). Les utiliser exigerait des résistances externes de 10 kΩ vers 3,3 V. Les GPIO 4/21/22/32/33 ont un pull-up interne : capteur câblé en deux fils (signal + masse), zéro composant.
 
-### Carte SD (module SPI optionnel)
+### Servo de débrayage de la tension du fil (axe A)
 
-| Signal | GPIO |
-|---|---|
-| CS | 5 |
-| MOSI | 23 |
-| MISO | 19 |
-| SCK | 18 |
+| Signal | GPIO | Note |
+|---|---|---|
+| Servo PWM | 18 | signal 3,3 V direct, servo alimenté en 5 V |
+
+Un petit servo (SG90 ou MG90S) pousse la **tige de débrayage des disques de tension** de la Singer. Pendant un saut long, le post-processeur relâche la tension (`G0 A90`) pour que le fil se dévide sans casser ni tirer le tissu, puis la ré-engage (`G0 A0`).
+
+- **Alimentation : le 5 V, pas le 3,3 V.** Un servo tire 100–250 mA en mouvement, trop pour la sortie 3,3 V de l'ESP32. Fil rouge → 5 V, fil noir → masse commune, fil signal → GPIO 18.
+- Le signal 3,3 V est accepté par la plupart des servos. Si le tien est capricieux, passe-le par un canal libre du 74HCT245.
+
+### Pas de carte SD — on brode en WiFi
+
+Le lecteur SD est abandonné : on envoie les fichiers G-code via l'interface web de FluidNC. Ça libère les GPIO 5, 18, 19, 23 — dont le **18 sert maintenant au servo**.
+
+Configuration WiFi (par commandes, une fois FluidNC flashé) :
+
+```
+$Sta/SSID=MonReseau
+$Sta/Password=MonMotDePasse
+$WiFi/Mode=STA
+```
 
 ## Broches à éviter
 

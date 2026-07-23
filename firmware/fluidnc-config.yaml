@@ -126,6 +126,29 @@ axes:
         step_pin: gpio.17
         direction_pin: gpio.14
 
+  # ---- A : servo de debrayage de la tension du fil ---------------------
+  # Un petit servo (SG90/MG90S) pousse la tige de debrayage des disques de
+  # tension de la Singer. Pendant un gros saut, on relache la tension pour
+  # que le fil se devide librement sans casser ni tirer le tissu.
+  #   A0  = tension serree (repos, position broderie)
+  #   A90 = tension relachee (pendant le saut)
+  # Le post-processeur insere les G0 A0/A90 autour des sauts longs.
+  #
+  # rc_servo : la position de l'axe A (0 a 90) est mappee sur l'impulsion
+  # PWM du servo (1 a 2 ms). Signal sur GPIO 18 (libere par le WiFi).
+  a:
+    steps_per_mm: 1.000
+    max_rate_mm_per_min: 6000.000
+    acceleration_mm_per_sec2: 5000.000
+    max_travel_mm: 90.000
+    soft_limits: false
+    motor0:
+      rc_servo:
+        pwm_hz: 50
+        output_pin: gpio.18
+        min_pulse_us: 1000
+        max_pulse_us: 2000
+
 # --------------------------------------------------------------------------
 # Entrees de controle
 # --------------------------------------------------------------------------
@@ -138,16 +161,17 @@ control:
   # Pas de bouton cycle-start dedie : reprise via l'interface web ou un pendant.
 
 # --------------------------------------------------------------------------
-# Carte SD (module SPI optionnel)
+# Reseau : on brode en WiFi (pas de carte SD)
 # --------------------------------------------------------------------------
-sdcard:
-  cs_pin: gpio.5
-  card_detect_pin: NO_PIN
-
-spi:
-  miso_pin: gpio.19
-  mosi_pin: gpio.23
-  sck_pin: gpio.18
+# Le lecteur SD est abandonne au profit du WiFi : cela libere les GPIO
+# 5, 18, 19, 23 -- dont le 18 sert maintenant au servo de tension.
+#
+# Le WiFi se configure par commandes une fois FluidNC flashe (pas dans ce
+# YAML), par exemple :
+#   $Sta/SSID=MonReseau
+#   $Sta/Password=MonMotDePasse
+#   $WiFi/Mode=STA
+# On envoie ensuite les fichiers G-code via l'interface web (WebUI).
 
 # --------------------------------------------------------------------------
 # Divers

@@ -60,6 +60,7 @@ Montage Y à **deux moteurs** (un par côté du portique), drivers câblés en p
 | **Alimentation Z** | **48 V / 5 A minimum** | 🔴 bloquant |
 | **Alimentation X/Y** | **24 V / 5 A**, ou convertisseur DC-DC 48→24 V | 🔴 bloquant |
 | Détecteur de casse-fil | Roue libre + capteur Hall ou fourche optique | 🟠 fortement conseillé |
+| **Servo de tension** | SG90 ou MG90S, sur la tige de débrayage des disques | 🟠 gère les sauts longs sans casser le fil |
 | Arrêt d'urgence | Bouton coup-de-poing câblé sur l'ENABLE | 🟠 sécurité |
 | Filament | PETG-CF + buse acier trempé 0,4 mm | 🟡 |
 
