@@ -15,10 +15,18 @@ Et la [**table de câblage**](table-cablage.md) : chaque fil du montage, avec or
 
 ## La carte de commande
 
-L'ESP32, le 74HCT245 et les connecteurs tiennent sur une plaque perforée de 100 × 90 mm :
+Deux versions du même circuit, à faire dans cet ordre.
 
-- [**Plan d'implantation**](plan-implantation-plaque.svg) — placement des composants trou par trou et tracé des liaisons
-- [**Liaisons trou par trou**](plaque-liaisons.md) — les 34 fils, avec leurs coordonnées, l'ordre de montage et les vérifications au multimètre
+**D'abord sans soudure**, pour valider la chaîne complète :
+
+- [**Montage sur platine d'essai**](montage-platine-essai.md) — pas à pas, avec le [plan](plan-platine-essai.svg)
+
+**Ensuite en version définitive**, une fois que la machine brode. Une platine d'essai tient par friction et ne survit pas aux vibrations :
+
+- [**Plan d'implantation sur plaque perforée**](plan-implantation-plaque.svg) — placement des composants trou par trou
+- [**Liaisons trou par trou**](plaque-liaisons.md) — les 34 fils, l'ordre de montage et les vérifications au multimètre
+
+Le circuit est strictement identique dans les deux cas.
 
 Le symbole de masse ⏚ désigne, sur les quatre schémas, un seul et même point physique.
 
