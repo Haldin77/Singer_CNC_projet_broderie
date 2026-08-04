@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1180 960" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
 <title>Schéma électrique brodeuse CNC Singer — portique Y à deux moteurs</title>
-<desc>Deux alimentations 48V et 24V, ESP32 sur USB, 74HCT245, quatre drivers dont deux DM320S en parallèle sur le rail Y à deux Nema 17, capteurs sur pins à pull-up interne.</desc>
+<desc>Deux alimentations 48V et 19,5V, ESP32 sur USB, 74HCT245, quatre drivers dont deux DM320S en parallèle sur le rail Y à deux Nema 17, capteurs sur pins à pull-up interne.</desc>
 <rect width="1180" height="960" fill="#ffffff"/>
 <style>
   .lbl {fill:#1a1a1a;font-size:14px;}
@@ -21,7 +21,7 @@
 
 <g transform="translate(24,52)">
   <line x1="0" y1="8" x2="26" y2="8" class="p48"/><text x="32" y="12" class="tiny">48 V</text>
-  <line x1="88" y1="8" x2="114" y2="8" class="p24"/><text x="120" y="12" class="tiny">24 V</text>
+  <line x1="88" y1="8" x2="114" y2="8" class="p24"/><text x="120" y="12" class="tiny">19,5 V</text>
   <line x1="172" y1="8" x2="198" y2="8" class="p5"/><text x="204" y="12" class="tiny">5 V</text>
   <line x1="246" y1="8" x2="272" y2="8" class="sig"/><text x="278" y="12" class="tiny">signaux</text>
   <line x1="350" y1="8" x2="376" y2="8" class="inp"/><text x="382" y="12" class="tiny">capteurs</text>
@@ -30,10 +30,10 @@
 
 <rect x="24" y="92" width="166" height="48" class="box" fill="#fef2f2" stroke="#dc2626" rx="8"/>
 <text x="107" y="112" class="lblb" text-anchor="middle">Mean Well 48 V</text>
-<text x="107" y="128" class="sub" text-anchor="middle">LRS-350-48 → Z</text>
+<text x="107" y="128" class="sub" text-anchor="middle">LRS-100-48 → Z</text>
 <rect x="24" y="152" width="166" height="48" class="box" fill="#fff7ed" stroke="#ea580c" rx="8"/>
-<text x="107" y="172" class="lblb" text-anchor="middle">Mean Well 24 V</text>
-<text x="107" y="188" class="sub" text-anchor="middle">LRS-150-24 → X + Y1 + Y2</text>
+<text x="107" y="172" class="lblb" text-anchor="middle">Bloc HP 19,5 V</text>
+<text x="107" y="188" class="sub" text-anchor="middle">récup 150 W → X, Y1, Y2</text>
 <rect x="24" y="212" width="166" height="48" class="box" fill="#f0fdf4" stroke="#16a34a" rx="8"/>
 <text x="107" y="232" class="lblb" text-anchor="middle">USB-C 5 V</text>
 <text x="107" y="248" class="sub" text-anchor="middle">ESP32 + 74HCT245</text>
@@ -81,15 +81,15 @@
 <text x="720" y="145" class="pin">◄B5 B6 B7 · 48V+ · GND</text>
 <rect x="708" y="166" width="150" height="60" class="box" fill="#fff7ed" stroke="#ea580c" rx="8"/>
 <text x="783" y="187" class="lblb" text-anchor="middle">DM320S · X</text>
-<text x="720" y="206" class="pin">◄B1 B2 B7 · 24V+</text>
+<text x="720" y="206" class="pin">◄B1 B2 B7 · 19,5V+</text>
 <text x="720" y="220" class="pin">GND</text>
 <rect x="708" y="238" width="150" height="60" class="box" fill="#fff7ed" stroke="#ea580c" rx="8"/>
 <text x="783" y="259" class="lblb" text-anchor="middle">DM320S · Y1</text>
-<text x="720" y="278" class="pin">◄B3 B4 B8 · 24V+</text>
+<text x="720" y="278" class="pin">◄B3 B4 B8 · 19,5V+</text>
 <text x="720" y="292" class="pin">GND</text>
 <rect x="708" y="310" width="150" height="60" class="box" fill="#fff7ed" stroke="#ea580c" rx="8"/>
 <text x="783" y="331" class="lblb" text-anchor="middle">DM320S · Y2</text>
-<text x="720" y="350" class="pin">◄B3 B4 B8 · 24V+</text>
+<text x="720" y="350" class="pin">◄B3 B4 B8 · 19,5V+</text>
 <text x="720" y="364" class="pin">GND (parallele Y1)</text>
 
 <path d="M642 258 H672 V121 H708" class="sig"/>
@@ -157,6 +157,6 @@
 <text x="40" y="818" class="lbl" font-size="13">1.  Portique Y : les 2 drivers DM320S (Y1, Y2) recoivent les MEMES signaux Y step/dir/ena, cables en parallele. Les 2 moteurs bougent ensemble.</text>
 <text x="40" y="840" class="lbl" font-size="13">2.  Verifier le SENS des 2 moteurs Y : ils doivent pousser le portique dans le meme sens. Si l'un part a l'envers, permuter une paire de fils de CE moteur.</text>
 <text x="40" y="862" class="lbl" font-size="13">3.  ENABLE reparti sur 2 canaux du 245 (B7 = X,Z ; B8 = Y1,Y2) : 4 drivers depassent les 35 mA d'un seul canal. Les 2 canaux viennent du meme GPIO 13.</text>
-<text x="40" y="884" class="lbl" font-size="13">4.  48 V uniquement sur le DM542. 24 V sur les 3 DM320S (jamais plus de 30 V). Toutes les masses reliees a la barre commune.</text>
-<text x="40" y="906" class="lbl" font-size="13">5.  Budget puissance 24 V : Nema 23 ~32 W + 3x Nema 17 ~29 W = ~61 W, soit 2,5 A. L'alim 150 W (6,5 A) garde 61 % de marge.</text>
+<text x="40" y="884" class="lbl" font-size="13">4.  48 V uniquement sur le DM542. 19,5 V sur les 3 DM320S (jamais plus de 38 V). Toutes les masses reliees a la barre commune.</text>
+<text x="40" y="906" class="lbl" font-size="13">5.  Alim 48 V : besoin ~54 W, le LRS-100-48 (100 W) garde 46 % de marge. Bloc HP 19,5 V : ~29 W pour 150 W dispo.</text>
 </svg>

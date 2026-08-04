@@ -23,11 +23,25 @@ Z est un axe rotatif en degrés qui n'est jamais remis à zéro. C'est ce qui pe
 |---|---|
 | Post-processeur DST → G-code | ✅ fonctionnel, testé |
 | Configuration FluidNC | ✅ écrite, non testée sur matériel |
-| Mécanique X/Y | 🔧 pièces commandées |
-| Axe Z | 🔧 pièces commandées |
-| Alimentations | ❌ à acheter — **bloquant** |
+| Schéma de câblage | ✅ [`docs/schema-cablage.svg`](docs/schema-cablage.svg) |
+| Simulation Wokwi | ✅ brochage validé |
+| **Mécanique** (portique X/Y + axe Z) | ✅ **montée et fonctionnelle** |
+| Montage électrique | 🔧 en cours |
+| Servo de tension du fil | 🔧 code prêt, servo à acheter |
+| Alimentations | ✅ 48 V commandée + bloc 19,5 V récupéré |
 | Détecteur de casse-fil | ❌ à concevoir |
 | Pièces imprimées 3D | ❌ à modéliser |
+
+## Architecture matérielle
+
+| Axe | Moteur | Driver | Alimentation |
+|---|---|---|---|
+| Z (aiguille) | Nema 23, 3 N·m | DM542 | **48 V** — Mean Well LRS-100-48 |
+| X | Nema 17 | DM320S | **19,5 V** — bloc HP récupéré |
+| Y | **2 × Nema 17** (portique) | 2 × DM320S en parallèle | 19,5 V |
+| A | Servo SG90/MG90S | PWM direct | 5 V |
+
+Contrôleur : **ESP32-WROOM-32** + **74HCT245** (adaptation 3,3 V → 5 V pour les optocoupleurs des drivers). Pas de carte SD : les fichiers sont envoyés en **WiFi** via l'interface web de FluidNC.
 
 ## Organisation du dépôt
 
@@ -35,10 +49,10 @@ Z est un axe rotatif en degrés qui n'est jamais remis à zéro. C'est ce qui pe
 firmware/     Configuration FluidNC (YAML)
 postproc/     Post-processeur broderie → G-code
   tests/      Fichiers DST de test
+simulation/   Simulation Wokwi (validation du brochage)
 gcode/        G-code généré
-hardware/     Nomenclature, câblage
-  cad/        Pièces à imprimer (SolidWorks / STL)
-docs/         Documentation détaillée
+hardware/cad/ Pièces à imprimer (SolidWorks / STL)
+docs/         Documentation détaillée + schéma de câblage
 ```
 
 ## Démarrage rapide
@@ -58,6 +72,7 @@ Inkscape + Ink/Stitch  →  motif.dst  →  dst2gcode.py  →  motif.nc  →  Fl
 
 ## Documentation
 
+- [**Montage électrique pas à pas**](docs/montage-electrique.md) — procédure avec test à chaque étape
 - [Nomenclature et état des commandes](docs/nomenclature.md)
 - [Câblage et brochage ESP32](docs/cablage.md)
 - [Calculs et dimensionnement](docs/calculs.md)
@@ -66,7 +81,7 @@ Inkscape + Ink/Stitch  →  motif.dst  →  dst2gcode.py  →  motif.nc  →  Fl
 
 ## Avertissements
 
-**Deux alimentations distinctes sont obligatoires.** Le DM542 de l'axe Z travaille en 48 V ; les DM320S des axes X/Y acceptent 10–30 V maximum et grilleraient en 48 V.
+**Ne jamais mettre 48 V sur les DM320S.** Ils acceptent 12–38 V maximum et grillent au-delà. Les deux alimentations restent strictement séparées : 48 V uniquement vers le DM542, 19,5 V vers les trois DM320S. Seules les **masses** sont communes.
 
 **Le pied à repriser n'est pas optionnel.** Avec un pied normal baissé, le tissu ne peut pas se déplacer. Relevé, le tissu remonte avec l'aiguille et les points sautent systématiquement. Il faut un pied à ressort qui suit la barre à aiguille, et les griffes d'entraînement abaissées.
 

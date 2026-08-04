@@ -1,0 +1,323 @@
+<svg viewBox="0 0 1280 1320" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
+<title>Brodeuse CNC Singer — schéma électronique complet avec alimentations</title>
+<desc>Distribution secteur 230 V protégée, terre de protection, alimentations 48 V / 19,5 V / 5 V, ESP32-WROOM-32, adaptateur de niveau 74HCT245, quatre drivers pas-à-pas, quatre moteurs, capteurs sur entrées à pull-up interne, arrêt d'urgence et servo de tension du fil.</desc>
+<rect width="1280" height="1320" fill="#ffffff"/>
+<style>
+  .h1  {fill:#111827;font-size:20px;font-weight:700;}
+  .h2  {fill:#374151;font-size:15px;font-weight:700;letter-spacing:0.3px;}
+  .lbl {fill:#1a1a1a;font-size:13.5px;}
+  .lblb{fill:#111827;font-size:13.5px;font-weight:700;}
+  .sub {fill:#6b7280;font-size:11.5px;}
+  .tiny{fill:#6b7280;font-size:10.5px;}
+  .pin {fill:#1a1a1a;font-size:11px;font-family:ui-monospace,monospace;}
+  .pinb{fill:#111827;font-size:11px;font-family:ui-monospace,monospace;font-weight:700;}
+  .band{fill:#fafafa;stroke:#e5e7eb;stroke-width:1.5;}
+  .box {fill:#f4f4f2;stroke:#d0d0cc;stroke-width:1.5;}
+  .ac  {stroke:#7c3aed;stroke-width:2.5;fill:none;}
+  .pe  {stroke:#65a30d;stroke-width:2.5;fill:none;}
+  .p48 {stroke:#dc2626;stroke-width:2.5;fill:none;}
+  .p24 {stroke:#ea580c;stroke-width:2.5;fill:none;}
+  .p5  {stroke:#16a34a;stroke-width:2;fill:none;}
+  .sig {stroke:#d97706;stroke-width:2;fill:none;}
+  .inp {stroke:#2563eb;stroke-width:2;fill:none;}
+  .gnd {stroke:#334155;stroke-width:2;fill:none;}
+</style>
+
+<text x="24" y="34" class="h1">Brodeuse CNC Singer — schéma électronique complet</text>
+<text x="24" y="54" class="sub">Portique Y à 2 moteurs · 3 alimentations séparées · ESP32 + 74HCT245 · FluidNC v4</text>
+
+<g transform="translate(690,30)">
+  <line x1="0" y1="14" x2="24" y2="14" class="ac"/><text x="30" y="18" class="tiny">230 V~</text>
+  <line x1="88" y1="14" x2="112" y2="14" class="pe"/><text x="118" y="18" class="tiny">terre PE</text>
+  <line x1="180" y1="14" x2="204" y2="14" class="p48"/><text x="210" y="18" class="tiny">48 V</text>
+  <line x1="256" y1="14" x2="280" y2="14" class="p24"/><text x="286" y="18" class="tiny">19,5 V</text>
+  <line x1="344" y1="14" x2="368" y2="14" class="p5"/><text x="374" y="18" class="tiny">5 V</text>
+  <line x1="410" y1="14" x2="434" y2="14" class="sig"/><text x="440" y="18" class="tiny">signaux</text>
+  <line x1="500" y1="14" x2="524" y2="14" class="inp"/><text x="530" y="18" class="tiny">capteurs</text>
+</g>
+
+<!-- =========================== BANDE 1 : ENERGIE =========================== -->
+<rect x="16" y="72" width="1248" height="306" rx="12" class="band"/>
+<text x="36" y="98" class="h2">1 · Distribution de l'énergie</text>
+
+<rect x="36" y="116" width="128" height="60" rx="8" class="box" fill="#faf5ff" stroke="#7c3aed"/>
+<text x="100" y="140" class="lblb" text-anchor="middle">Prise 230 V</text>
+<text x="100" y="158" class="sub" text-anchor="middle">L · N · PE</text>
+
+<path d="M164 140 H196" class="ac"/>
+<rect x="196" y="116" width="150" height="60" rx="8" class="box" fill="#faf5ff" stroke="#7c3aed"/>
+<text x="271" y="138" class="lblb" text-anchor="middle">Interrupteur</text>
+<text x="271" y="156" class="sub" text-anchor="middle">bipolaire + fusible T 2 A</text>
+
+<path d="M100 176 V232" class="pe"/>
+<rect x="36" y="232" width="310" height="44" rx="8" class="box" fill="#f7fee7" stroke="#65a30d"/>
+<text x="191" y="250" class="lblb" text-anchor="middle">Terre de protection (vert/jaune)</text>
+<text x="191" y="266" class="sub" text-anchor="middle">châssis · carcasses des 2 alims · bâti de la Singer</text>
+
+<path d="M346 146 H372" class="ac"/>
+<path d="M372 146 V332" class="ac"/>
+<path d="M372 146 H400 M372 232 H400 M372 332 H400" class="ac"/>
+<circle cx="372" cy="232" r="3.5" fill="#7c3aed"/>
+<circle cx="372" cy="332" r="3.5" fill="#7c3aed"/>
+
+<rect x="400" y="116" width="186" height="60" rx="8" class="box" fill="#fef2f2" stroke="#dc2626"/>
+<text x="493" y="138" class="lblb" text-anchor="middle">Mean Well LRS-100-48</text>
+<text x="493" y="156" class="sub" text-anchor="middle">48 V / 2,1 A — 100 W</text>
+
+<rect x="400" y="202" width="186" height="60" rx="8" class="box" fill="#fff7ed" stroke="#ea580c"/>
+<text x="493" y="224" class="lblb" text-anchor="middle">Bloc secteur HP 19,5 V</text>
+<text x="493" y="242" class="sub" text-anchor="middle">7,69 A — 150 W (récup.)</text>
+
+<rect x="400" y="302" width="186" height="60" rx="8" class="box" fill="#f0fdf4" stroke="#16a34a"/>
+<text x="493" y="324" class="lblb" text-anchor="middle">Chargeur USB 5 V</text>
+<text x="493" y="342" class="sub" text-anchor="middle">2 A · câble data épais</text>
+
+<path d="M586 146 H700" class="p48"/>
+<rect x="700" y="116" width="200" height="60" rx="8" class="box" fill="#fef2f2" stroke="#dc2626"/>
+<text x="800" y="138" class="lblb" text-anchor="middle">DM542 · axe Z</text>
+<text x="800" y="156" class="sub" text-anchor="middle">bornes V+ / GND</text>
+
+<path d="M586 232 H700" class="p24"/>
+<line x1="632" y1="232" x2="632" y2="262" class="p24"/>
+<line x1="620" y1="262" x2="644" y2="262" stroke="#ea580c" stroke-width="3"/>
+<line x1="620" y1="270" x2="644" y2="270" stroke="#ea580c" stroke-width="3"/>
+<line x1="632" y1="270" x2="632" y2="292" class="gnd"/>
+<line x1="622" y1="292" x2="642" y2="292" class="gnd" stroke-width="3"/>
+<text x="600" y="206" class="tiny" fill="#c2410c">1000 µF / 35 V</text>
+<text x="600" y="220" class="tiny" fill="#c2410c">près des drivers</text>
+<circle cx="632" cy="232" r="3.5" fill="#ea580c"/>
+
+<rect x="700" y="202" width="200" height="60" rx="8" class="box" fill="#fff7ed" stroke="#ea580c"/>
+<text x="800" y="224" class="lblb" text-anchor="middle">3 × DM320S · X, Y1, Y2</text>
+<text x="800" y="242" class="sub" text-anchor="middle">alimentés en parallèle</text>
+
+<path d="M586 332 H700" class="p5"/>
+<rect x="700" y="302" width="200" height="60" rx="8" class="box" fill="#f0fdf4" stroke="#16a34a"/>
+<text x="800" y="324" class="lblb" text-anchor="middle">ESP32 (prise micro-USB)</text>
+<text x="800" y="342" class="sub" text-anchor="middle">broche 5V → 245 + servo</text>
+
+<rect x="928" y="116" width="316" height="246" rx="8" fill="#ffffff" stroke="#d0d0cc" stroke-width="1.5"/>
+<text x="946" y="140" class="lblb">Bilan de puissance</text>
+<line x1="946" y1="150" x2="1226" y2="150" stroke="#e5e7eb"/>
+<text x="946" y="172" class="lbl">48 V → axe Z</text><text x="1226" y="172" class="lbl" text-anchor="end">≈ 54 W / 100 W</text>
+<text x="946" y="194" class="lbl">19,5 V → X + Y1 + Y2</text><text x="1226" y="194" class="lbl" text-anchor="end">≈ 29 W / 150 W</text>
+<text x="946" y="216" class="lbl">5 V → ESP32, 245, servo</text><text x="1226" y="216" class="lbl" text-anchor="end">≈ 3 W / 10 W</text>
+<line x1="946" y1="232" x2="1226" y2="232" stroke="#e5e7eb"/>
+<text x="946" y="254" class="lbl" fill="#b91c1c" font-weight="700">Jamais 48 V sur un DM320S</text>
+<text x="946" y="272" class="tiny">Maximum 38 V, et on ne dépasse pas 80 % de cette</text>
+<text x="946" y="288" class="tiny">valeur. Repère physiquement les deux alims.</text>
+<text x="946" y="312" class="lbl" fill="#b91c1c" font-weight="700">Masse commune obligatoire</text>
+<text x="946" y="330" class="tiny">Les trois « − » sont reliés entre eux (barre du bas).</text>
+<text x="946" y="346" class="tiny">Sans cela les optocoupleurs des drivers ne voient rien.</text>
+
+<!-- ====================== BANDE 2 : CHAINE DE COMMANDE ====================== -->
+<rect x="16" y="392" width="1248" height="424" rx="12" class="band"/>
+<text x="36" y="418" class="h2">2 · Chaîne de commande — ESP32 → 74HCT245 → drivers → moteurs</text>
+
+<rect x="36" y="434" width="228" height="356" rx="10" class="box" fill="#eef2ff" stroke="#4f46e5"/>
+<text x="150" y="458" class="lblb" text-anchor="middle" font-size="14.5">ESP32-WROOM-32</text>
+<text x="150" y="474" class="sub" text-anchor="middle">DevKitC 38 broches · CP2102</text>
+<line x1="50" y1="486" x2="250" y2="486" stroke="#c7d2fe"/>
+<text x="50" y="504" class="tiny" font-weight="700">SORTIES → 74HCT245</text>
+<text x="50" y="524" class="pin">GPIO26  X step    → A1</text>
+<text x="50" y="540" class="pin">GPIO16  X dir     → A2</text>
+<text x="50" y="556" class="pin">GPIO25  Y step    → A3</text>
+<text x="50" y="572" class="pin">GPIO27  Y dir     → A4</text>
+<text x="50" y="588" class="pin">GPIO17  Z step    → A5</text>
+<text x="50" y="604" class="pin">GPIO14  Z dir     → A6</text>
+<text x="50" y="620" class="pin">GPIO13  ENABLE    → A7+A8</text>
+<line x1="50" y1="632" x2="250" y2="632" stroke="#c7d2fe"/>
+<text x="50" y="650" class="tiny" font-weight="700">ENTRÉES (pull-up interne)</text>
+<text x="50" y="670" class="pin">GPIO4   fin course X</text>
+<text x="50" y="686" class="pin">GPIO21  fin course Y</text>
+<text x="50" y="702" class="pin">GPIO22  Hall index Z</text>
+<text x="50" y="718" class="pin">GPIO32  casse-fil</text>
+<text x="50" y="734" class="pin">GPIO33  arrêt d'urgence</text>
+<line x1="50" y1="746" x2="250" y2="746" stroke="#c7d2fe"/>
+<text x="50" y="764" class="pin">GPIO18  servo tension (PWM)</text>
+<text x="50" y="782" class="tiny">Signal 3,3 V direct · servo en 5 V</text>
+
+<circle cx="264" cy="520" r="3.5" fill="#d97706"/>
+<circle cx="264" cy="616" r="3.5" fill="#d97706"/>
+
+<rect x="324" y="474" width="176" height="196" rx="10" class="box" fill="#fffbeb" stroke="#d97706"/>
+<text x="412" y="498" class="lblb" text-anchor="middle">74HCT245</text>
+<text x="412" y="514" class="sub" text-anchor="middle">3,3 V → 5 V garanti 4,4 V</text>
+<line x1="338" y1="524" x2="486" y2="524" stroke="#fde68a"/>
+<text x="338" y="544" class="pin">B1 B2 → X</text>
+<text x="338" y="560" class="pin">B3 B4 → Y1 + Y2</text>
+<text x="338" y="576" class="pin">B5 B6 → Z</text>
+<text x="338" y="592" class="pin">B7 → ENA X, Z</text>
+<text x="338" y="608" class="pin">B8 → ENA Y1, Y2</text>
+<line x1="338" y1="620" x2="486" y2="620" stroke="#fde68a"/>
+<text x="338" y="638" class="pinb">pin 20 → +5 V</text>
+<text x="338" y="654" class="pinb">pin 1 DIR → +5 V</text>
+<text x="338" y="670" class="pinb">pin 19 OE → GND</text>
+
+<path d="M264 520 H296 V544 H324" class="sig"/>
+<path d="M264 616 H306 V592 H324" class="sig"/>
+<path d="M264 770 H288 V452 H412 V474" class="p5" opacity="0.9"/>
+<text x="296" y="446" class="tiny" fill="#15803d">+5 V de l'ESP32 → pin 20 et pin 1 (DIR)</text>
+
+<rect x="540" y="434" width="184" height="66" rx="8" class="box" fill="#fef2f2" stroke="#dc2626"/>
+<text x="632" y="456" class="lblb" text-anchor="middle">DM542 · Z</text>
+<text x="632" y="472" class="sub" text-anchor="middle">1/4 pas · 4,0 A · 48 V</text>
+<text x="552" y="490" class="pin">PUL+←B5  DIR+←B6  ENA+←B7</text>
+
+<rect x="540" y="522" width="184" height="66" rx="8" class="box" fill="#fff7ed" stroke="#ea580c"/>
+<text x="632" y="544" class="lblb" text-anchor="middle">DM320S · X</text>
+<text x="632" y="560" class="sub" text-anchor="middle">1/16 pas · 1,5 A · 19,5 V</text>
+<text x="552" y="578" class="pin">PUL+←B1  DIR+←B2  ENA+←B7</text>
+
+<rect x="540" y="610" width="184" height="66" rx="8" class="box" fill="#fff7ed" stroke="#ea580c"/>
+<text x="632" y="632" class="lblb" text-anchor="middle">DM320S · Y1</text>
+<text x="632" y="648" class="sub" text-anchor="middle">1/16 pas · 1,5 A · 19,5 V</text>
+<text x="552" y="666" class="pin">PUL+←B3  DIR+←B4  ENA+←B8</text>
+
+<rect x="540" y="698" width="184" height="66" rx="8" class="box" fill="#fff7ed" stroke="#ea580c"/>
+<text x="632" y="720" class="lblb" text-anchor="middle">DM320S · Y2</text>
+<text x="632" y="736" class="sub" text-anchor="middle">mêmes signaux que Y1</text>
+<text x="552" y="754" class="pin">PUL+←B3  DIR+←B4  ENA+←B8</text>
+
+<path d="M500 544 H520 V467 H540" class="sig"/>
+<path d="M500 560 H514 V555 H540" class="sig"/>
+<path d="M500 576 H508 V643 H540" class="sig"/>
+<path d="M508 643 V731 H540" class="sig"/>
+<circle cx="508" cy="643" r="3.5" fill="#d97706"/>
+
+<text x="552" y="514" class="tiny" fill="#334155">PUL− DIR− ENA− → masse commune</text>
+
+<circle cx="820" cy="467" r="34" class="box" fill="#f1f5f9" stroke="#475569"/>
+<text x="820" y="472" class="lblb" text-anchor="middle">N23</text>
+<text x="880" y="462" class="lbl">Nema 23 · 3 N·m</text>
+<text x="880" y="478" class="sub">axe Z — arbre principal (2:1)</text>
+<path d="M724 467 H786" class="gnd" stroke="#475569"/>
+
+<circle cx="820" cy="555" r="28" class="box" fill="#f1f5f9" stroke="#475569"/>
+<text x="820" y="560" class="lblb" text-anchor="middle">N17</text>
+<text x="880" y="551" class="lbl">Nema 17 · axe X</text>
+<text x="880" y="567" class="sub">courroie GT2, 40 mm/tour</text>
+<path d="M724 555 H792" class="gnd" stroke="#475569"/>
+
+<circle cx="820" cy="643" r="28" class="box" fill="#f1f5f9" stroke="#475569"/>
+<text x="820" y="648" class="lblb" text-anchor="middle">N17</text>
+<text x="880" y="639" class="lbl">Nema 17 · Y gauche</text>
+<text x="880" y="655" class="sub">portique, côté gauche</text>
+<path d="M724 643 H792" class="gnd" stroke="#475569"/>
+
+<circle cx="820" cy="731" r="28" class="box" fill="#f1f5f9" stroke="#475569"/>
+<text x="820" y="736" class="lblb" text-anchor="middle">N17</text>
+<text x="880" y="727" class="lbl">Nema 17 · Y droite</text>
+<text x="880" y="743" class="sub">portique, côté droit</text>
+<path d="M724 731 H792" class="gnd" stroke="#475569"/>
+
+<rect x="1064" y="434" width="180" height="330" rx="8" fill="#ffffff" stroke="#d0d0cc" stroke-width="1.5"/>
+<text x="1080" y="458" class="lblb">À ne pas rater</text>
+<line x1="1080" y1="468" x2="1228" y2="468" stroke="#e5e7eb"/>
+<text x="1080" y="488" class="tiny" font-weight="700">ENABLE sur 2 canaux</text>
+<text x="1080" y="504" class="tiny">4 optos ≈ 50 mA, or le 245</text>
+<text x="1080" y="518" class="tiny">donne 35 mA par sortie.</text>
+<text x="1080" y="532" class="tiny">A7 et A8 viennent du même</text>
+<text x="1080" y="546" class="tiny">GPIO 13.</text>
+<text x="1080" y="574" class="tiny" font-weight="700">Y1 et Y2 en parallèle</text>
+<text x="1080" y="590" class="tiny">Mêmes signaux, un seul axe</text>
+<text x="1080" y="604" class="tiny">FluidNC. Si un moteur part à</text>
+<text x="1080" y="618" class="tiny">l'envers : permuter A+ / A−</text>
+<text x="1080" y="632" class="tiny">sur CE moteur, pas le YAML.</text>
+<text x="1080" y="660" class="tiny" font-weight="700">74HCT, pas 74HC</text>
+<text x="1080" y="676" class="tiny">Le HC a un seuil à 3,15 V :</text>
+<text x="1080" y="690" class="tiny">marginal avec 3,3 V.</text>
+<text x="1080" y="718" class="tiny" font-weight="700">Jamais débrancher</text>
+<text x="1080" y="734" class="tiny">un moteur sous tension —</text>
+<text x="1080" y="748" class="tiny">la surtension tue le driver.</text>
+
+<!-- ================= BANDE 3 : CAPTEURS, URGENCE, SERVO ================= -->
+<rect x="16" y="832" width="1248" height="286" rx="12" class="band"/>
+<text x="36" y="858" class="h2">3 · Capteurs, arrêt d'urgence et servo de tension</text>
+
+<rect x="36" y="874" width="252" height="220" rx="10" class="box" fill="#eff6ff" stroke="#2563eb"/>
+<text x="162" y="896" class="lblb" text-anchor="middle">Principe : capteur 2 fils</text>
+<g transform="translate(84,896)">
+  <line x1="0" y1="8" x2="60" y2="8" class="inp" stroke="#2563eb"/>
+  <text x="66" y="12" class="tiny">3,3 V interne</text>
+  <line x1="30" y1="8" x2="30" y2="26" class="inp"/>
+  <rect x="22" y="26" width="16" height="32" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <text x="46" y="46" class="tiny">≈ 45 kΩ pull-up</text>
+  <line x1="30" y1="58" x2="30" y2="82" class="inp"/>
+  <circle cx="30" cy="82" r="3.5" fill="#2563eb"/>
+  <line x1="30" y1="82" x2="96" y2="82" class="inp"/>
+  <text x="102" y="86" class="pinb">GPIO</text>
+  <line x1="30" y1="82" x2="30" y2="104" class="inp"/>
+  <circle cx="30" cy="107" r="3.5" fill="#2563eb"/>
+  <line x1="30" y1="110" x2="48" y2="132" class="inp"/>
+  <circle cx="30" cy="135" r="3.5" fill="#2563eb"/>
+  <text x="56" y="126" class="tiny">contact NO</text>
+  <line x1="30" y1="138" x2="30" y2="158" class="gnd"/>
+  <line x1="16" y1="158" x2="44" y2="158" class="gnd" stroke-width="3"/>
+  <line x1="21" y1="164" x2="39" y2="164" class="gnd"/>
+  <line x1="26" y1="170" x2="34" y2="170" class="gnd"/>
+</g>
+<text x="52" y="1076" class="tiny">Repos = 1 (tiré au 3,3 V) · actionné = 0.</text>
+<text x="52" y="1090" class="tiny">Aucun composant externe : 2 fils suffisent.</text>
+
+<rect x="312" y="874" width="286" height="220" rx="10" class="box" fill="#ffffff" stroke="#2563eb"/>
+<text x="455" y="896" class="lblb" text-anchor="middle">Entrées utilisées</text>
+<line x1="326" y1="906" x2="584" y2="906" stroke="#dbeafe"/>
+<text x="326" y="926" class="pinb">GPIO 4</text><text x="416" y="926" class="lbl" font-size="12">fin de course X</text>
+<text x="326" y="944" class="tiny">origine du homing X (cycle 2)</text>
+<text x="326" y="968" class="pinb">GPIO 21</text><text x="416" y="968" class="lbl" font-size="12">fin de course Y</text>
+<text x="326" y="986" class="tiny">un seul suffit : les 2 moteurs bougent ensemble</text>
+<text x="326" y="1010" class="pinb">GPIO 22</text><text x="416" y="1010" class="lbl" font-size="12">Hall KY-003 (index Z)</text>
+<text x="326" y="1028" class="tiny">point mort haut de l'aiguille · homing cycle 1</text>
+<text x="326" y="1052" class="pinb">GPIO 32</text><text x="416" y="1052" class="lbl" font-size="12">casse-fil → feed hold</text>
+<text x="326" y="1076" class="pinb">GPIO 33</text><text x="416" y="1076" class="lbl" font-size="12">arrêt d'urgence → reset</text>
+
+<rect x="622" y="874" width="286" height="220" rx="10" class="box" fill="#fef2f2" stroke="#dc2626"/>
+<text x="765" y="896" class="lblb" text-anchor="middle">Arrêt d'urgence — GPIO 33</text>
+<line x1="636" y1="906" x2="894" y2="906" stroke="#fecaca"/>
+<text x="636" y="928" class="lbl" font-size="12.5">Bouton coup-de-poing, contact NO,</text>
+<text x="636" y="946" class="lbl" font-size="12.5">câblé entre GPIO 33 et la masse.</text>
+<text x="636" y="972" class="tiny" font-weight="700" fill="#b91c1c">Un contact NC maintiendrait la broche</text>
+<text x="636" y="988" class="tiny" font-weight="700" fill="#b91c1c">à 0 en permanence → « reset loop ».</text>
+<text x="636" y="1014" class="lbl" font-size="12.5">Ne jamais laisser ce fil en l'air : il capte</text>
+<text x="636" y="1032" class="lbl" font-size="12.5">le bruit des drivers et provoque des</text>
+<text x="636" y="1050" class="lbl" font-size="12.5">resets fantômes.</text>
+<text x="636" y="1076" class="tiny">Il coupe le mouvement, pas la puissance : le vrai</text>
+<text x="636" y="1090" class="tiny">coupe-circuit reste l'interrupteur 230 V.</text>
+
+<rect x="932" y="874" width="312" height="220" rx="10" class="box" fill="#f0fdf4" stroke="#16a34a"/>
+<text x="1088" y="896" class="lblb" text-anchor="middle">Servo de tension du fil — axe A</text>
+<line x1="946" y1="906" x2="1230" y2="906" stroke="#bbf7d0"/>
+<text x="946" y="928" class="pinb">fil orange</text><text x="1054" y="928" class="lbl" font-size="12">signal → GPIO 18</text>
+<text x="946" y="952" class="pinb">fil rouge</text><text x="1054" y="952" class="lbl" font-size="12">+5 V (jamais 3,3 V)</text>
+<text x="946" y="976" class="pinb">fil marron</text><text x="1054" y="976" class="lbl" font-size="12">masse commune</text>
+<line x1="946" y1="992" x2="1230" y2="992" stroke="#bbf7d0"/>
+<text x="946" y="1014" class="lbl" font-size="12.5">SG90 / MG90S · 50 Hz · 1000–2000 µs</text>
+<text x="946" y="1034" class="tiny">Pousse la tige de débrayage des disques de tension</text>
+<text x="946" y="1050" class="tiny">pendant les sauts longs : G0 A90 relâche, G0 A0 serre.</text>
+<text x="946" y="1076" class="tiny" font-weight="700">100–250 mA en mouvement — au-delà de ce que la</text>
+<text x="946" y="1092" class="tiny" font-weight="700">sortie 3,3 V de l'ESP32 peut fournir.</text>
+
+<!-- ===================== BANDE 4 : MASSE COMMUNE ===================== -->
+<text x="36" y="1164" class="h2">4 · Barre de masse commune — le point le plus important du montage</text>
+<line x1="36" y1="1186" x2="1244" y2="1186" class="gnd" stroke-width="4"/>
+<g class="gnd">
+  <line x1="130" y1="1186" x2="130" y2="1204"/>
+  <line x1="330" y1="1186" x2="330" y2="1204"/>
+  <line x1="530" y1="1186" x2="530" y2="1204"/>
+  <line x1="730" y1="1186" x2="730" y2="1204"/>
+  <line x1="930" y1="1186" x2="930" y2="1204"/>
+  <line x1="1130" y1="1186" x2="1130" y2="1204"/>
+</g>
+<text x="130" y="1220" class="tiny" text-anchor="middle">48 V −</text>
+<text x="330" y="1220" class="tiny" text-anchor="middle">19,5 V − (+ condensateur)</text>
+<text x="530" y="1220" class="tiny" text-anchor="middle">ESP32 GND</text>
+<text x="730" y="1220" class="tiny" text-anchor="middle">74HCT245 pin 10 + pin 19</text>
+<text x="930" y="1220" class="tiny" text-anchor="middle">4 × PUL− / DIR− / ENA−</text>
+<text x="1130" y="1220" class="tiny" text-anchor="middle">servo, capteurs, bouton</text>
+
+<rect x="36" y="1240" width="1208" height="62" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+<text x="54" y="1264" class="lblb" font-size="12.5">La masse est commune, les « + » ne le sont pas.</text>
+<text x="368" y="1264" class="lbl" font-size="12.5">Les trois alimentations partagent leur borne négative : c'est ce qui donne au signal sa référence.</text>
+<text x="54" y="1286" class="lbl" font-size="12.5">Mais le 48 V ne doit jamais rencontrer le 19,5 V, ni le 5 V. Câblage en étoile depuis un point unique, pas une guirlande d'un driver à l'autre.</text>
+</svg>

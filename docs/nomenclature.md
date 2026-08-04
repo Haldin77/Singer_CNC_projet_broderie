@@ -23,7 +23,7 @@ Dernière mise à jour : 20 juillet 2026
 | Pièce | Spécification | État | Prix |
 |---|---|---|---|
 | Moteurs | 3 × Nema 17 (42×42), arbre 5 mm, 1,5–1,8 A, 1,8° | ✅ reçu (Leboncoin) | occasion |
-| Drivers | 3 × Cloudray DM320S, **10–30 V**, 0,3–2,2 A | ✅ reçu (Leboncoin) | occasion |
+| Drivers | 3 × Cloudray DM320S, **12–38 V** (relevé sur étiquette) | ✅ reçu (Leboncoin) | occasion |
 
 Montage Y à **deux moteurs** (un par côté du portique), drivers câblés en parallèle. X = 1 moteur, Y = 2 moteurs → 3 Nema 17, 3 DM320S.
 | Poulies | 3 × GT2, 20 dents, alésage 5 mm | 🚚 en route | 7,02 € |
@@ -53,30 +53,43 @@ Montage Y à **deux moteurs** (un par côté du portique), drivers câblés en p
 | Cadre de broderie | Type Brother SA444, 130 × 180 mm | ✅ reçu (Amazon) | — |
 | Câble | Silicone 2 conducteurs, 18 AWG, 5 m | ✅ reçu | 3,99 € |
 
+## Alimentations
+
+Deux alimentations séparées, une par groupe de drivers.
+
+| Alim | Pour | État | Prix |
+|---|---|---|---|
+| **Mean Well LRS-100-48** — 48 V / 2,1 A | DM542 → Nema 23 (Z) | ✅ commandé (Reichelt) | ~25 € |
+| **Bloc HP 19,5 V / 7,69 A** — 150 W | 3 × DM320S → Nema 17 (X, Y1, Y2) | ✅ récupération | 0 € |
+
+### Pourquoi ce découpage
+
+**48 V sur l'axe Z.** À chaque demi-cycle électrique, le driver doit inverser 4,2 A dans l'inductance du bobinage (3,8 mH). Plus la tension est haute, plus vite il y parvient :
+
+| Tension | Décrochage moteur | Cadence machine (2:1) |
+|---|---|---|
+| 19,5 V | ~350 tr/min | ~175 pts/min |
+| 24 V | ~500 tr/min | ~250 pts/min |
+| **48 V** | **~900 tr/min** | **~450 pts/min** |
+
+Besoin réel : 32 W de pertes cuivre + ~15 W mécanique, rendement driver 87 % → **~54 W**. Le LRS-100-48 donne 46 % de marge.
+
+**19,5 V sur les axes X/Y.** Les DM320S acceptent 12–38 V, le bloc HP est donc dans la plage avec de la marge des deux côtés. Et cette tension ne bride pas la vitesse : à 120 mm/s (180 tr/min), il faut 0,52 ms pour inverser le courant alors que la demi-période en offre 3,33 — **un facteur 6 de marge**.
+
+⚠️ **Ne jamais mettre 48 V sur les DM320S** (max 38 V). Et éviter le 36 V : avec seulement 2 V de marge, un pic de BEMF suffit à les détruire. Règle d'usage : ne pas dépasser 80 % de la tension max d'un driver.
+
+⚠️ **Condensateur 1000 µF / 35 V** en parallèle sur la sortie du bloc HP, au plus près des drivers : les alims de PC portable supportent mal l'énergie renvoyée par les moteurs en décélération (BEMF). Respecter la polarité.
+
 ## ❌ Reste à acquérir
 
 | Pièce | Spécification | Criticité |
 |---|---|---|
-| **Alimentation Z** | **48 V / 5 A minimum** | 🔴 bloquant |
-| **Alimentation X/Y** | **24 V / 5 A**, ou convertisseur DC-DC 48→24 V | 🔴 bloquant |
 | Détecteur de casse-fil | Roue libre + capteur Hall ou fourche optique | 🟠 fortement conseillé |
 | **Servo de tension** | SG90 ou MG90S, sur la tige de débrayage des disques | 🟠 gère les sauts longs sans casser le fil |
 | Arrêt d'urgence | Bouton coup-de-poing câblé sur l'ENABLE | 🟠 sécurité |
+| Plaques de renvoi | Plat alu 50 × 5 mm, 6 pièces — voir `hardware/cad/` | 🟠 mécanique |
+| Condensateur | 1000 µF / 35 V (protection BEMF) | 🟡 |
 | Filament | PETG-CF + buse acier trempé 0,4 mm | 🟡 |
-
-### Sur les alimentations
-
-Le moteur Nema 23 de 3 N·m tire environ **4,2 A**. Le DM542 encaisse (limite 4,2 A), mais il faut du **48 V** : en 24 V, ce moteur s'effondre au-delà de ~500 tr/min moteur, soit 250 points/min à la machine.
-
-Vérification du besoin de tension — à chaque demi-cycle électrique, le driver doit inverser 4,2 A dans l'inductance du bobinage :
-
-| Vitesse machine | Vitesse moteur (2:1) | 24 V | 48 V |
-|---|---|---|---|
-| 250 pts/min | 500 tr/min | ✅ | ✅ |
-| 400 pts/min | 800 tr/min | ❌ | ✅ |
-| 500 pts/min | 1000 tr/min | ❌ | ✅ |
-
-**Les DM320S ne supportent pas le 48 V** (10–30 V maximum). Deux alimentations séparées, ou une 48 V plus un convertisseur DC-DC abaisseur pour la branche X/Y.
 
 ## Budget
 
@@ -84,5 +97,6 @@ Vérification du besoin de tension — à chaque demi-cycle électrique, le driv
 |---|---|
 | Commandes AliExpress | ~185 € |
 | Occasion Leboncoin (3 Nema 17 + 3 DM320S) | — |
-| Addison Électronique | ~10 $ CA |
-| **Restant estimé (alimentations)** | **~80–120 €** |
+| Alimentation 48 V (Reichelt) | ~25 € |
+| Alimentation 19,5 V (récupération) | 0 € |
+| **Restant estimé (servo, plat alu, divers)** | **~30 €** |

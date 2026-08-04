@@ -2,19 +2,23 @@
 
 ## Schéma d'ensemble
 
-![Schéma électrique](schema-cablage.svg)
+![Schéma électronique complet](schema-electronique-complet.svg)
 
-Le fichier [`schema-cablage.svg`](schema-cablage.svg) reprend tout le câblage : alimentations, ESP32, 74HCT245, les quatre drivers (dont Y1/Y2 en parallèle) et les capteurs. Ouvre-le dans un navigateur pour le zoom.
+Le fichier [`schema-electronique-complet.svg`](schema-electronique-complet.svg) est la référence : distribution secteur 230 V avec interrupteur bipolaire et fusible, terre de protection, les trois alimentations, l'ESP32, le 74HCT245, les quatre drivers (dont Y1/Y2 en parallèle), les moteurs, les capteurs, l'arrêt d'urgence et le servo — plus la barre de masse commune.
+
+Le [`schema-cablage.svg`](schema-cablage.svg) d'origine reste disponible : plus compact, il ne montre que la partie basse tension. Ouvre l'un ou l'autre dans un navigateur pour zoomer.
 
 ## Architecture
 
 ```
    Secteur
       │
-      ├── Alim 48 V ─────► DM542 ──────► Nema 23 (axe Z)
+      ├── Alim 48 V ────► DM542 ──────► Nema 23 (axe Z)
+      │   (LRS-100-48)
       │
-      ├── Alim 24 V ──┬──► DM320S ─────► Nema 17 (axe X)
-      │               └──► DM320S ─────► Nema 17 (axe Y)
+      ├── Alim 19,5 V ─┬─► DM320S ─────► Nema 17 (axe X)
+      │    (bloc HP    ├─► DM320S ─────► Nema 17 (axe Y gauche)
+      │     récupéré)  └─► DM320S ─────► Nema 17 (axe Y droite)
       │
       └── USB 5 V ───────► ESP32 + 74HCT245
                               │
@@ -81,6 +85,35 @@ Reprise (*cycle start*) : via l'interface web FluidNC, pas de bouton dédié.
 
 ⚠️ **Pourquoi pas les GPIO 34–39 ?** Ils sont en entrée seule et **sans pull-up interne** : ils flottent et donnent des lectures fantômes (constaté en simulation Wokwi). Les utiliser exigerait des résistances externes de 10 kΩ vers 3,3 V. Les GPIO 4/21/22/32/33 ont un pull-up interne : capteur câblé en deux fils (signal + masse), zéro composant.
 
+### Combien de fins de course faut-il ?
+
+**Deux sont indispensables** : X sur GPIO 4, Y sur GPIO 21. Ce ne sont pas des sécurités mais les **références d'origine** de la machine. Le YAML impose `must_home: true` — sans elles, FluidNC refuse tout mouvement, et un motif brodé n'aurait aucun repère commun d'une session à l'autre.
+
+Un seul capteur suffit pour Y, même avec deux moteurs : ils sont mécaniquement solidaires du portique et bougent ensemble.
+
+L'axe Z n'a pas de fin de course mécanique, mais un **capteur Hall** (GPIO 22) qui indexe l'aiguille au point mort haut. C'est le même rôle : donner une origine.
+
+**Les capteurs en trop ne sont pas inutiles.** Trois usages, par ordre d'intérêt :
+
+1. **Rechange.** Un microrupteur de fin de course finit par s'user ou se dérégler. En avoir deux d'avance évite d'arrêter le projet pour une pièce à 1 €.
+
+2. **Butée de fin de course opposée.** Chaque axe n'est protégé que d'un côté. Un second capteur à l'autre extrémité déclenche une alarme si le chariot déborde. Utile pendant la mise au point, quand `steps_per_mm` ou `max_travel_mm` sont encore approximatifs.
+
+3. **Doubler le capteur Y.** Avec un capteur par côté du portique, FluidNC peut détecter qu'il s'est mis en biais (`squaring`). C'est un raffinement, pas une nécessité sur une course de 180 mm.
+
+Pour l'usage 2, deux montages possibles :
+
+| Montage | Câblage | Limite |
+|---|---|---|
+| Un GPIO par capteur | GPIO 19 et 23 (libérés par l'abandon du SD) | consomme des broches |
+| Les deux en parallèle sur un GPIO | contacts NO reliés au même fil | FluidNC ne sait pas lequel a déclenché |
+
+Les contacts NO en parallèle fonctionnent bien : n'importe lequel qui se ferme tire la broche à la masse. Utiliser `limit_all_pin` dans le YAML plutôt que `limit_neg_pin`.
+
+⚠️ Éviter **GPIO 5** pour cet usage : c'est une broche de strapping. Un capteur actionné au moment du démarrage empêcherait la carte de booter. GPIO 19 et 23 n'ont pas ce défaut.
+
+⚠️ **Contacts NO, pas NC.** Un microrupteur câblé en normalement fermé maintient la broche à la masse en permanence — sur GPIO 33 cela provoque le fameux « reset loop ». Vérifie chaque capteur au multimètre avant de le monter : relâché = circuit ouvert, actionné = continuité.
+
 ### Servo de débrayage de la tension du fil (axe A)
 
 | Signal | GPIO | Note |
@@ -128,7 +161,11 @@ $WiFi/Mode=STA
 |---|---|---|
 | Microstepping | **1/16** (3200 pas/tour) | 80 pas/mm → résolution 0,0125 mm |
 | Courant | selon les Nema 17 | typiquement 1,2–1,7 A |
-| Tension | **24 V** | ⚠️ jamais plus de 30 V |
+| Tension | **19,5 V** (bloc HP) | plage driver 12–38 V. ⚠️ jamais plus de 38 V |
+
+Le 19,5 V ne bride pas la vitesse : à 120 mm/s (180 tr/min), inverser le courant demande 0,52 ms alors que la demi-période en offre 3,33 — **6× de marge**.
+
+⚠️ **Condensateur 1000 µF / 35 V** en parallèle sur la sortie du bloc HP, au plus près des drivers. Les alimentations de PC portable supportent mal l'énergie renvoyée par les moteurs en décélération (BEMF) et peuvent couper. Respecter la polarité : bande blanche vers le −.
 
 ## Détecteur de casse-fil
 

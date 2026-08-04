@@ -1,17 +1,17 @@
-// Brodeuse CNC Singer -- configuration FluidNC
-//
-// Materiel :
-//   Controleur  ESP32-WROOM-32 DevKitC 38 broches (CP2102)
-//   Adaptation  74HCT245 pour convertir les sorties 3,3 V en 5 V
-//   Axe Z       Nema 23 3 N.m + driver DM542, alim 48 V
-//   Axes X/Y    Nema 17 + drivers DM320S, alim 24 V
-//
-// ATTENTION -- deux alimentations distinctes sont obligatoires.
-// Les DM320S acceptent 10-30 V et grilleraient en 48 V.
-//
-// Convention de l'axe Z : rotatif, exprime en DEGRES D'ARBRE PRINCIPAL.
-//   1 point de broderie = 360 deg = 1 tour complet de l'arbre.
-//   Le rapport de reduction 2:1 est absorbe par steps_per_mm ci-dessous.
+# Brodeuse CNC Singer -- configuration FluidNC
+#
+# Materiel :
+#   Controleur  ESP32-WROOM-32 DevKitC 38 broches (CP2102)
+#   Adaptation  74HCT245 pour convertir les sorties 3,3 V en 5 V
+#   Axe Z       Nema 23 3 N.m + driver DM542, alim 48 V
+#   Axes X/Y    Nema 17 + drivers DM320S, alim 24 V
+#
+# ATTENTION -- deux alimentations distinctes sont obligatoires.
+# Les DM320S acceptent 10-30 V et grilleraient en 48 V.
+#
+# Convention de l'axe Z : rotatif, exprime en DEGRES D'ARBRE PRINCIPAL.
+#   1 point de broderie = 360 deg = 1 tour complet de l'arbre.
+#   Le rapport de reduction 2:1 est absorbe par steps_per_mm ci-dessous.
 
 name: "Brodeuse Singer CNC"
 board: "ESP32 DevKitC 38 broches"
@@ -39,9 +39,12 @@ axes:
   #   steps_per_mm = 3200 / 40 = 80        -> resolution 0,0125 mm
   x:
     steps_per_mm: 80.000
-    max_rate_mm_per_min: 12000.000        # 200 mm/s
-    acceleration_mm_per_sec2: 3000.000    # a monter apres essais (voir docs)
-    max_travel_mm: 130.000                # cadre Brother SA444
+    # 200 mm/s
+    max_rate_mm_per_min: 12000.000
+    # a monter apres essais (voir docs)
+    acceleration_mm_per_sec2: 3000.000
+    # cadre Brother SA444
+    max_travel_mm: 130.000
     soft_limits: true
     homing:
       cycle: 2
@@ -101,9 +104,12 @@ axes:
   # 10 700 pas/s, tres confortable. Z n'a aucun besoin de resolution fine.
   z:
     steps_per_mm: 4.4444
-    max_rate_mm_per_min: 216000.000       # 600 deg/s = 600 points/min
-    acceleration_mm_per_sec2: 2000.000    # volant en fonte : montee en vitesse douce
-    max_travel_mm: 10000000.000           # rotation quasi illimitee
+    # 600 deg/s = 600 points/min
+    max_rate_mm_per_min: 216000.000
+    # volant en fonte : montee en vitesse douce
+    acceleration_mm_per_sec2: 2000.000
+    # rotation quasi illimitee
+    max_travel_mm: 10000000.000
     soft_limits: false
     homing:
       # Indexation sur le capteur Hall : amene l'aiguille au point mort haut.
@@ -111,8 +117,10 @@ axes:
       cycle: 1
       positive_direction: true
       mpos_mm: 0.000
-      feed_mm_per_min: 3600.000           # 10 deg/s, lent et precis
-      seek_mm_per_min: 18000.000          # 50 deg/s
+      # 10 deg/s, lent et precis
+      feed_mm_per_min: 3600.000
+      # 50 deg/s
+      seek_mm_per_min: 18000.000
       settle_ms: 500
       seek_scaler: 1.000
       feed_scaler: 1.000
@@ -121,7 +129,8 @@ axes:
       # Sortie a collecteur ouvert -> pull-up interne (GPIO 22 en possede un).
       limit_pos_pin: gpio.22:low:pu
       hard_limits: false
-      pulloff_mm: 5.000                   # 5 deg de degagement
+      # 5 deg de degagement
+      pulloff_mm: 5.000
       standard_stepper:
         step_pin: gpio.17
         direction_pin: gpio.14
@@ -182,3 +191,4 @@ start:
 
 # Pas de broche ni de laser sur cette machine.
 # L'entrainement de l'aiguille est un axe de mouvement, pas une broche.
+
