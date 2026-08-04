@@ -13,6 +13,13 @@ Quatre schémas, un par sous-ensemble. Chacun tient sur un écran et se lit sans
 
 Et la [**table de câblage**](table-cablage.md) : chaque fil du montage, avec origine, destination, section et couleur. C'est elle qu'il faut avoir sous les yeux avec le fer à souder — les schémas servent à comprendre, la table à exécuter.
 
+## La carte de commande
+
+L'ESP32, le 74HCT245 et les connecteurs tiennent sur une plaque perforée de 100 × 90 mm :
+
+- [**Plan d'implantation**](plan-implantation-plaque.svg) — placement des composants trou par trou et tracé des liaisons
+- [**Liaisons trou par trou**](plaque-liaisons.md) — les 34 fils, avec leurs coordonnées, l'ordre de montage et les vérifications au multimètre
+
 Le symbole de masse ⏚ désigne, sur les quatre schémas, un seul et même point physique.
 
 > Les vues d'ensemble [`schema-cablage.svg`](schema-cablage.svg) et [`schema-electronique-complet.svg`](schema-electronique-complet.svg) restent dans le dépôt, mais elles sont denses. Préfère les quatre schémas ci-dessus pour le montage.
