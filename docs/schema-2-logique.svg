@@ -1,0 +1,95 @@
+<svg viewBox="0 0 1140 740" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
+<title>Schéma 2 — ESP32 vers 74HCT245</title>
+<desc>Brochage réel du boîtier DIP-20 du 74HCT245 : entrées A depuis les GPIO de l'ESP32, sorties B vers les drivers, broche 1 DIR au 5 V, broche 19 OE à la masse, broche 20 au 5 V, broche 10 à la masse.</desc>
+<rect width="1140" height="740" fill="#ffffff"/>
+<style>
+  .h1  {fill:#111827;font-size:19px;font-weight:700;}
+  .lbl {fill:#1a1a1a;font-size:13px;}
+  .lblb{fill:#111827;font-size:13.5px;font-weight:700;}
+  .sub {fill:#6b7280;font-size:11.5px;}
+  .tiny{fill:#6b7280;font-size:10.5px;}
+  .mono{fill:#1a1a1a;font-size:12px;font-family:ui-monospace,monospace;}
+  .monb{fill:#111827;font-size:12px;font-family:ui-monospace,monospace;font-weight:700;}
+  .pnum{fill:#6b7280;font-size:10.5px;font-family:ui-monospace,monospace;}
+  .sig {stroke:#d97706;stroke-width:2.2;fill:none;}
+  .p5  {stroke:#16a34a;stroke-width:2.2;fill:none;}
+  .gnd {stroke:#334155;stroke-width:2;fill:none;}
+</style>
+
+<text x="24" y="32" class="h1">2 · ESP32 → 74HCT245</text>
+<text x="24" y="52" class="sub">L'adaptateur de niveau 3,3 V → 5 V. Brochage réel du boîtier DIP-20, repère (encoche) vers le haut.</text>
+
+<text x="60" y="188" class="lblb">ESP32-WROOM-32</text>
+<rect x="60" y="200" width="240" height="360" rx="8" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.8"/>
+<text x="78" y="237" class="mono">GPIO 26</text><text x="176" y="237" class="sub">X step</text>
+<text x="78" y="279" class="mono">GPIO 16</text><text x="176" y="279" class="sub">X dir</text>
+<text x="78" y="321" class="mono">GPIO 25</text><text x="176" y="321" class="sub">Y step</text>
+<text x="78" y="363" class="mono">GPIO 27</text><text x="176" y="363" class="sub">Y dir</text>
+<text x="78" y="405" class="mono">GPIO 17</text><text x="176" y="405" class="sub">Z step</text>
+<text x="78" y="447" class="mono">GPIO 14</text><text x="176" y="447" class="sub">Z dir</text>
+<text x="78" y="489" class="mono">GPIO 13</text><text x="176" y="489" class="sub">enable</text>
+<text x="78" y="531" class="mono">GPIO 13</text><text x="176" y="531" class="sub">enable</text>
+<path d="M300 232 H460 M300 274 H460 M300 316 H460 M300 358 H460 M300 400 H460 M300 442 H460 M300 484 H460 M300 526 H460" class="sig"/>
+
+<path d="M152 489 H160 V531 H152" class="sig"/>
+<text x="60" y="580" class="tiny">Les deux canaux enable partent du même GPIO 13.</text>
+
+<rect x="460" y="160" width="220" height="440" rx="6" fill="#fffbeb" stroke="#d97706" stroke-width="2"/>
+<path d="M556 160 A14 14 0 0 0 584 160" fill="#ffffff" stroke="#d97706" stroke-width="2"/>
+<text x="570" y="204" class="lblb" text-anchor="middle">74HCT245</text>
+<text x="570" y="222" class="tiny" text-anchor="middle">DIP-20 · pas 74HC</text>
+
+<text x="470" y="196" class="pnum">1</text><text x="492" y="196" class="monb">DIR</text>
+<text x="470" y="238" class="pnum">2</text><text x="492" y="238" class="mono">A1</text>
+<text x="470" y="280" class="pnum">3</text><text x="492" y="280" class="mono">A2</text>
+<text x="470" y="322" class="pnum">4</text><text x="492" y="322" class="mono">A3</text>
+<text x="470" y="364" class="pnum">5</text><text x="492" y="364" class="mono">A4</text>
+<text x="470" y="406" class="pnum">6</text><text x="492" y="406" class="mono">A5</text>
+<text x="470" y="448" class="pnum">7</text><text x="492" y="448" class="mono">A6</text>
+<text x="470" y="490" class="pnum">8</text><text x="492" y="490" class="mono">A7</text>
+<text x="470" y="532" class="pnum">9</text><text x="492" y="532" class="mono">A8</text>
+<text x="470" y="574" class="pnum">10</text><text x="496" y="574" class="monb">GND</text>
+
+<text x="670" y="196" class="pnum" text-anchor="end">20</text><text x="644" y="196" class="monb" text-anchor="end">VCC</text>
+<text x="670" y="238" class="pnum" text-anchor="end">19</text><text x="644" y="238" class="monb" text-anchor="end">OE</text>
+<text x="670" y="280" class="pnum" text-anchor="end">18</text><text x="644" y="280" class="mono" text-anchor="end">B1</text>
+<text x="670" y="322" class="pnum" text-anchor="end">17</text><text x="644" y="322" class="mono" text-anchor="end">B2</text>
+<text x="670" y="364" class="pnum" text-anchor="end">16</text><text x="644" y="364" class="mono" text-anchor="end">B3</text>
+<text x="670" y="406" class="pnum" text-anchor="end">15</text><text x="644" y="406" class="mono" text-anchor="end">B4</text>
+<text x="670" y="448" class="pnum" text-anchor="end">14</text><text x="644" y="448" class="mono" text-anchor="end">B5</text>
+<text x="670" y="490" class="pnum" text-anchor="end">13</text><text x="644" y="490" class="mono" text-anchor="end">B6</text>
+<text x="670" y="532" class="pnum" text-anchor="end">12</text><text x="644" y="532" class="mono" text-anchor="end">B7</text>
+<text x="670" y="574" class="pnum" text-anchor="end">11</text><text x="644" y="574" class="mono" text-anchor="end">B8</text>
+
+<path d="M460 190 H400 V132" class="p5"/>
+<text x="400" y="122" class="lblb" text-anchor="middle" fill="#15803d">+5 V</text>
+<text x="400" y="106" class="tiny" text-anchor="middle">broche 5V de l'ESP32</text>
+
+<path d="M680 190 H740 V132" class="p5"/>
+<text x="740" y="122" class="lblb" text-anchor="middle" fill="#15803d">+5 V</text>
+
+<path d="M460 568 H400 V606" class="gnd"/>
+<g class="gnd" transform="translate(400,606)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+
+<path d="M680 232 H752 V246" class="gnd"/>
+<g class="gnd" transform="translate(752,246)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="774" y="250" class="tiny">OE à la masse</text>
+
+<path d="M680 274 H790 M680 316 H790 M680 358 H790 M680 400 H790 M680 442 H790 M680 484 H790 M680 526 H790 M680 568 H790" class="sig"/>
+<text x="800" y="279" class="lbl">PUL+ · driver X</text>
+<text x="800" y="321" class="lbl">DIR+ · driver X</text>
+<text x="800" y="363" class="lbl">PUL+ · drivers Y1 et Y2</text>
+<text x="800" y="405" class="lbl">DIR+ · drivers Y1 et Y2</text>
+<text x="800" y="447" class="lbl">PUL+ · driver Z</text>
+<text x="800" y="489" class="lbl">DIR+ · driver Z</text>
+<text x="800" y="531" class="lbl">ENA+ · drivers X et Z</text>
+<text x="800" y="573" class="lbl">ENA+ · drivers Y1 et Y2</text>
+
+<rect x="60" y="632" width="1020" height="88" rx="8" fill="#f1f5f9" stroke="#475569" stroke-width="1.8"/>
+<text x="80" y="656" class="lblb">Les trois broches qu'on oublie</text>
+<text x="80" y="678" class="lbl">Broche 1 (DIR) au +5 V : fixe le sens de transfert A → B.  ·  Broche 19 (OE) à la masse : active les sorties.</text>
+<text x="80" y="700" class="lbl">Broche 20 (VCC) au +5 V.  Sans ces trois-là, la puce reste muette et aucun driver ne bouge — c'est la panne n° 1.</text>
+
+<text x="800" y="600" class="tiny">A1 ressort en B1, A2 en B2, etc.</text>
+<text x="800" y="616" class="tiny">La correspondance est interne au boîtier.</text>
+</svg>

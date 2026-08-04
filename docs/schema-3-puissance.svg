@@ -1,0 +1,119 @@
+<svg viewBox="0 0 1140 1120" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
+<title>Schéma 3 — Drivers et moteurs</title>
+<desc>Les quatre drivers pas-à-pas : bornes de signal reliées aux sorties B du 74HCT245, bornes négatives à la masse commune, alimentation de puissance et raccordement des bobines moteur.</desc>
+<rect width="1140" height="1120" fill="#ffffff"/>
+<style>
+  .h1  {fill:#111827;font-size:19px;font-weight:700;}
+  .lbl {fill:#1a1a1a;font-size:12.5px;}
+  .lblb{fill:#111827;font-size:13.5px;font-weight:700;}
+  .sub {fill:#6b7280;font-size:11.5px;}
+  .tiny{fill:#6b7280;font-size:10.5px;}
+  .mono{fill:#1a1a1a;font-size:11.5px;font-family:ui-monospace,monospace;}
+  .monb{fill:#111827;font-size:11.5px;font-family:ui-monospace,monospace;font-weight:700;}
+  .coil{stroke:#475569;stroke-width:2.2;fill:none;}
+  .gnd {stroke:#334155;stroke-width:2;fill:none;}
+</style>
+
+<text x="24" y="32" class="h1">3 · Drivers et moteurs</text>
+<text x="24" y="52" class="sub">Chaque driver reçoit trois signaux du 74HCT245, trois retours à la masse, et sa propre alimentation.</text>
+
+<!-- ============ X ============ -->
+<rect x="60" y="80" width="470" height="192" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+<text x="80" y="108" class="lblb">DM320S · axe X</text>
+<text x="80" y="126" class="sub">1/16 de pas (3200 pas/tour) · 1,5 A · alimenté en 19,5 V</text>
+<line x1="80" y1="138" x2="510" y2="138" stroke="#fed7aa"/>
+<text x="80" y="160" class="monb">PUL+</text><text x="140" y="160" class="lbl">← 245 broche 18 (B1)</text>
+<text x="80" y="182" class="monb">DIR+</text><text x="140" y="182" class="lbl">← 245 broche 17 (B2)</text>
+<text x="80" y="204" class="monb">ENA+</text><text x="140" y="204" class="lbl">← 245 broche 12 (B7)</text>
+<text x="80" y="226" class="monb">VCC</text><text x="140" y="226" class="lbl">← 19,5 V</text>
+<text x="320" y="160" class="mono">PUL−</text><text x="380" y="160" class="lbl">→ 0 V</text>
+<text x="320" y="182" class="mono">DIR−</text><text x="380" y="182" class="lbl">→ 0 V</text>
+<text x="320" y="204" class="mono">ENA−</text><text x="380" y="204" class="lbl">→ 0 V</text>
+<text x="320" y="226" class="mono">GND</text><text x="380" y="226" class="lbl">→ 0 V</text>
+<text x="80" y="254" class="tiny">Bornes moteur : A+ A− B+ B−</text>
+<path d="M530 176 H600" class="coil"/>
+<text x="565" y="168" class="tiny" text-anchor="middle">4 fils</text>
+<circle cx="640" cy="176" r="40" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+<text x="640" y="181" class="lblb" text-anchor="middle">N17</text>
+<text x="700" y="164" class="lbl">Nema 17 — chariot X</text>
+<text x="700" y="184" class="sub">courroie GT2, poulie 20 dents</text>
+<text x="700" y="202" class="sub">40 mm par tour → 80 pas/mm</text>
+
+<!-- ============ Y1 ============ -->
+<rect x="60" y="296" width="470" height="192" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+<text x="80" y="324" class="lblb">DM320S · axe Y — moteur gauche (Y1)</text>
+<text x="80" y="342" class="sub">1/16 de pas · 1,5 A · alimenté en 19,5 V</text>
+<line x1="80" y1="354" x2="510" y2="354" stroke="#fed7aa"/>
+<text x="80" y="376" class="monb">PUL+</text><text x="140" y="376" class="lbl">← 245 broche 16 (B3)</text>
+<text x="80" y="398" class="monb">DIR+</text><text x="140" y="398" class="lbl">← 245 broche 15 (B4)</text>
+<text x="80" y="420" class="monb">ENA+</text><text x="140" y="420" class="lbl">← 245 broche 11 (B8)</text>
+<text x="80" y="442" class="monb">VCC</text><text x="140" y="442" class="lbl">← 19,5 V</text>
+<text x="320" y="376" class="mono">PUL−</text><text x="380" y="376" class="lbl">→ 0 V</text>
+<text x="320" y="398" class="mono">DIR−</text><text x="380" y="398" class="lbl">→ 0 V</text>
+<text x="320" y="420" class="mono">ENA−</text><text x="380" y="420" class="lbl">→ 0 V</text>
+<text x="320" y="442" class="mono">GND</text><text x="380" y="442" class="lbl">→ 0 V</text>
+<text x="80" y="470" class="tiny">Bornes moteur : A+ A− B+ B−</text>
+<path d="M530 392 H600" class="coil"/>
+<text x="565" y="384" class="tiny" text-anchor="middle">4 fils</text>
+<circle cx="640" cy="392" r="40" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+<text x="640" y="397" class="lblb" text-anchor="middle">N17</text>
+<text x="700" y="386" class="lbl">Nema 17 — portique, côté gauche</text>
+<text x="700" y="406" class="sub">vis ou courroie du portique</text>
+
+<!-- ============ Y2 ============ -->
+<rect x="60" y="512" width="470" height="192" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+<text x="80" y="540" class="lblb">DM320S · axe Y — moteur droit (Y2)</text>
+<text x="80" y="558" class="sub">réglages strictement identiques à Y1</text>
+<line x1="80" y1="570" x2="510" y2="570" stroke="#fed7aa"/>
+<text x="80" y="592" class="monb">PUL+</text><text x="140" y="592" class="lbl">← 245 broche 16 (B3)</text>
+<text x="80" y="614" class="monb">DIR+</text><text x="140" y="614" class="lbl">← 245 broche 15 (B4)</text>
+<text x="80" y="636" class="monb">ENA+</text><text x="140" y="636" class="lbl">← 245 broche 11 (B8)</text>
+<text x="80" y="658" class="monb">VCC</text><text x="140" y="658" class="lbl">← 19,5 V</text>
+<text x="320" y="592" class="mono">PUL−</text><text x="380" y="592" class="lbl">→ 0 V</text>
+<text x="320" y="614" class="mono">DIR−</text><text x="380" y="614" class="lbl">→ 0 V</text>
+<text x="320" y="636" class="mono">ENA−</text><text x="380" y="636" class="lbl">→ 0 V</text>
+<text x="320" y="658" class="mono">GND</text><text x="380" y="658" class="lbl">→ 0 V</text>
+<text x="80" y="686" class="tiny">Mêmes fils que Y1 : les deux drivers sont en parallèle sur B3, B4 et B8.</text>
+<path d="M530 608 H600" class="coil"/>
+<text x="565" y="600" class="tiny" text-anchor="middle">4 fils</text>
+<circle cx="640" cy="608" r="40" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+<text x="640" y="613" class="lblb" text-anchor="middle">N17</text>
+<text x="700" y="602" class="lbl">Nema 17 — portique, côté droit</text>
+<text x="700" y="622" class="sub">doit pousser dans le même sens que Y1</text>
+
+<!-- ============ Z ============ -->
+<rect x="60" y="728" width="470" height="192" rx="10" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+<text x="80" y="756" class="lblb">DM542 · axe Z — arbre principal</text>
+<text x="80" y="774" class="sub">1/4 de pas (800 pas/tour) · 4,0 A · alimenté en 48 V</text>
+<line x1="80" y1="786" x2="510" y2="786" stroke="#fecaca"/>
+<text x="80" y="808" class="monb">PUL+</text><text x="140" y="808" class="lbl">← 245 broche 14 (B5)</text>
+<text x="80" y="830" class="monb">DIR+</text><text x="140" y="830" class="lbl">← 245 broche 13 (B6)</text>
+<text x="80" y="852" class="monb">ENA+</text><text x="140" y="852" class="lbl">← 245 broche 12 (B7)</text>
+<text x="80" y="874" class="monb">VCC</text><text x="140" y="874" class="lbl">← 48 V</text>
+<text x="320" y="808" class="mono">PUL−</text><text x="380" y="808" class="lbl">→ 0 V</text>
+<text x="320" y="830" class="mono">DIR−</text><text x="380" y="830" class="lbl">→ 0 V</text>
+<text x="320" y="852" class="mono">ENA−</text><text x="380" y="852" class="lbl">→ 0 V</text>
+<text x="320" y="874" class="mono">GND</text><text x="380" y="874" class="lbl">→ 0 V</text>
+<text x="80" y="902" class="tiny" fill="#b91c1c">Seul driver alimenté en 48 V. Vérifier trois fois avant la mise sous tension.</text>
+<path d="M530 824 H600" class="coil"/>
+<text x="565" y="816" class="tiny" text-anchor="middle">4 fils</text>
+<circle cx="640" cy="824" r="44" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+<text x="640" y="829" class="lblb" text-anchor="middle">N23</text>
+<text x="704" y="812" class="lbl">Nema 23, 3 N·m — arbre principal</text>
+<text x="704" y="832" class="sub">réduction 2:1 par poulies</text>
+<text x="704" y="850" class="sub">1 point de broderie = 1 tour d'arbre</text>
+
+<g class="gnd" transform="translate(920,300)"><line x1="0" y1="-16" x2="0" y2="0"/><line x1="-13" y1="0" x2="13" y2="0" stroke-width="3.5"/><line x1="-9" y1="7" x2="9" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="920" y="336" class="tiny" text-anchor="middle">« 0 V » = ce symbole</text>
+<text x="920" y="352" class="tiny" text-anchor="middle">= la masse commune</text>
+
+<rect x="60" y="944" width="1020" height="150" rx="10" fill="#f1f5f9" stroke="#475569" stroke-width="1.8"/>
+<text x="80" y="970" class="lblb">Repérer les bobines avant de brancher</text>
+<text x="80" y="994" class="lbl">Un moteur 4 fils porte deux bobines. Au multimètre en ohmmètre : deux fils qui montrent une faible résistance</text>
+<text x="80" y="1014" class="lbl">(2,6 Ω sur les Nema 17, 0,9 Ω sur le Nema 23) forment une bobine → A+ et A−. Les deux autres → B+ et B−.</text>
+<text x="80" y="1034" class="lbl">Entre deux fils de bobines différentes : circuit ouvert.</text>
+<text x="80" y="1062" class="lbl" font-weight="700">Le moteur vibre sans tourner ?</text>
+<text x="278" y="1062" class="lbl">Les paires sont mélangées — couper l'alimentation, permuter B+ et B−.</text>
+<text x="80" y="1084" class="lbl" font-weight="700">Un moteur Y part à l'envers ?</text>
+<text x="268" y="1084" class="lbl">Permuter A+ et A− sur ce moteur seul, pas le YAML : les deux partagent le signal de direction.</text>
+</svg>

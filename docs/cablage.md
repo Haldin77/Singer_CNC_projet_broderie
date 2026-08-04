@@ -1,12 +1,21 @@
 # Câblage et brochage
 
-## Schéma d'ensemble
+## Les schémas
 
-![Schéma électronique complet](schema-electronique-complet.svg)
+Quatre schémas, un par sous-ensemble. Chacun tient sur un écran et se lit sans se perdre dans les fils.
 
-Le fichier [`schema-electronique-complet.svg`](schema-electronique-complet.svg) est la référence : distribution secteur 230 V avec interrupteur bipolaire et fusible, terre de protection, les trois alimentations, l'ESP32, le 74HCT245, les quatre drivers (dont Y1/Y2 en parallèle), les moteurs, les capteurs, l'arrêt d'urgence et le servo — plus la barre de masse commune.
+| Schéma | Contenu |
+|---|---|
+| [1 · Alimentations](schema-1-alimentations.svg) | arrivée 230 V, interrupteur bipolaire, fusible, terre de protection, les trois alimentations, le condensateur |
+| [2 · ESP32 → 74HCT245](schema-2-logique.svg) | brochage réel du boîtier DIP-20, entrées A, sorties B, et les trois broches de service qu'on oublie |
+| [3 · Drivers et moteurs](schema-3-puissance.svg) | les quatre drivers borne par borne, et le raccordement des bobines |
+| [4 · Capteurs](schema-4-capteurs.svg) | principe du pull-up interne, fins de course, arrêt d'urgence, capteurs Hall, servo |
 
-Le [`schema-cablage.svg`](schema-cablage.svg) d'origine reste disponible : plus compact, il ne montre que la partie basse tension. Ouvre l'un ou l'autre dans un navigateur pour zoomer.
+Et la [**table de câblage**](table-cablage.md) : chaque fil du montage, avec origine, destination, section et couleur. C'est elle qu'il faut avoir sous les yeux avec le fer à souder — les schémas servent à comprendre, la table à exécuter.
+
+Le symbole de masse ⏚ désigne, sur les quatre schémas, un seul et même point physique.
+
+> Les vues d'ensemble [`schema-cablage.svg`](schema-cablage.svg) et [`schema-electronique-complet.svg`](schema-electronique-complet.svg) restent dans le dépôt, mais elles sont denses. Préfère les quatre schémas ci-dessus pour le montage.
 
 ## Architecture
 

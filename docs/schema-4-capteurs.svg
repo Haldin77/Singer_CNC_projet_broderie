@@ -1,0 +1,151 @@
+<svg viewBox="0 0 1140 830" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
+<title>Schéma 4 — Capteurs, arrêt d'urgence et servo</title>
+<desc>Câblage des entrées de l'ESP32 : principe du pull-up interne, fins de course à contact sec, arrêt d'urgence, capteurs à effet Hall à trois fils et servomoteur de tension du fil.</desc>
+<rect width="1140" height="830" fill="#ffffff"/>
+<style>
+  .h1  {fill:#111827;font-size:19px;font-weight:700;}
+  .lbl {fill:#1a1a1a;font-size:12.5px;}
+  .lblb{fill:#111827;font-size:13.5px;font-weight:700;}
+  .sub {fill:#6b7280;font-size:11.5px;}
+  .tiny{fill:#6b7280;font-size:10.5px;}
+  .mono{fill:#1a1a1a;font-size:11.5px;font-family:ui-monospace,monospace;}
+  .monb{fill:#111827;font-size:11.5px;font-family:ui-monospace,monospace;font-weight:700;}
+  .inp {stroke:#2563eb;stroke-width:2.2;fill:none;}
+  .p5  {stroke:#16a34a;stroke-width:2.2;fill:none;}
+  .gnd {stroke:#334155;stroke-width:2;fill:none;}
+</style>
+
+<text x="24" y="32" class="h1">4 · Capteurs, arrêt d'urgence et servo</text>
+<text x="24" y="52" class="sub">Toutes les entrées utilisent le pull-up interne de l'ESP32 : deux fils par capteur, aucune résistance à ajouter.</text>
+
+<rect x="60" y="76" width="1020" height="150" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.8"/>
+<text x="82" y="104" class="lblb">Le principe : le pull-up interne</text>
+<text x="82" y="130" class="lbl">Une résistance d'environ 45 kΩ, intégrée à l'ESP32, maintient la broche au niveau haut.</text>
+<text x="82" y="150" class="lbl">Le capteur n'a rien à fournir : il se contente de tirer la broche à la masse quand il se déclenche.</text>
+<text x="82" y="176" class="lbl">Au repos la broche lit 1, actionnée elle lit 0. C'est ce que FluidNC attend avec le suffixe</text>
+<text x="628" y="176" class="monb">:low:pu</text>
+<text x="82" y="202" class="tiny">Les GPIO 34 à 39 sont proscrits : entrée seule et sans pull-up, ils flottent et donnent des déclenchements fantômes.</text>
+
+<g transform="translate(880,86)">
+  <text x="-16" y="12" class="tiny" text-anchor="end">3,3 V interne</text>
+  <line x1="0" y1="4" x2="0" y2="18" class="inp"/>
+  <rect x="-8" y="18" width="16" height="28" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <text x="20" y="38" class="tiny">45 kΩ</text>
+  <line x1="0" y1="46" x2="0" y2="64" class="inp"/>
+  <circle cx="0" cy="64" r="3.5" fill="#2563eb"/>
+  <line x1="0" y1="64" x2="56" y2="64" class="inp"/>
+  <text x="62" y="68" class="monb">GPIO</text>
+  <line x1="0" y1="64" x2="0" y2="80" class="inp"/>
+  <circle cx="0" cy="82" r="3.5" fill="#2563eb"/>
+  <line x1="0" y1="82" x2="16" y2="100" class="inp"/>
+  <circle cx="0" cy="102" r="3.5" fill="#2563eb"/>
+  <text x="24" y="98" class="tiny">capteur</text>
+  <line x1="0" y1="102" x2="0" y2="118" class="gnd"/>
+  <g class="gnd" transform="translate(0,118)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+</g>
+
+<!-- ================= LIGNE 1 : contacts secs ================= -->
+<rect x="60" y="250" width="300" height="250" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="1.8"/>
+<text x="80" y="278" class="lblb">Fin de course X</text>
+<text x="80" y="296" class="sub">origine du homing, cycle 2</text>
+<text x="76" y="348" class="monb">GPIO 4</text>
+<line x1="140" y1="344" x2="196" y2="344" class="inp"/>
+<circle cx="196" cy="344" r="3.5" fill="#2563eb"/>
+<line x1="196" y1="344" x2="216" y2="324" class="inp"/>
+<circle cx="240" cy="344" r="3.5" fill="#2563eb"/>
+<line x1="240" y1="344" x2="240" y2="376" class="gnd"/>
+<g class="gnd" transform="translate(240,376)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="196" y="316" class="tiny">microrupteur NO</text>
+<text x="80" y="424" class="lbl">Microrupteur à contact</text>
+<text x="216" y="424" class="lbl" font-weight="700">normalement ouvert.</text>
+<text x="80" y="444" class="lbl">Il se ferme quand le chariot vient buter</text>
+<text x="80" y="464" class="lbl">dessus, ce qui donne l'origine machine.</text>
+<text x="80" y="486" class="tiny">FluidNC : limit_neg_pin: gpio.4:low:pu</text>
+
+<rect x="420" y="250" width="300" height="250" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="1.8"/>
+<text x="440" y="278" class="lblb">Fin de course Y</text>
+<text x="440" y="296" class="sub">origine du homing, cycle 2</text>
+<text x="436" y="348" class="monb">GPIO 21</text>
+<line x1="504" y1="344" x2="556" y2="344" class="inp"/>
+<circle cx="556" cy="344" r="3.5" fill="#2563eb"/>
+<line x1="556" y1="344" x2="576" y2="324" class="inp"/>
+<circle cx="600" cy="344" r="3.5" fill="#2563eb"/>
+<line x1="600" y1="344" x2="600" y2="376" class="gnd"/>
+<g class="gnd" transform="translate(600,376)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="556" y="316" class="tiny">microrupteur NO</text>
+<text x="440" y="424" class="lbl">Un seul capteur suffit pour l'axe Y :</text>
+<text x="440" y="444" class="lbl">les deux moteurs sont solidaires du</text>
+<text x="440" y="464" class="lbl">portique et se déplacent ensemble.</text>
+<text x="440" y="486" class="tiny">FluidNC : limit_neg_pin: gpio.21:low:pu</text>
+
+<rect x="780" y="250" width="300" height="250" rx="10" fill="#fef2f2" stroke="#dc2626" stroke-width="1.8"/>
+<text x="800" y="278" class="lblb">Arrêt d'urgence</text>
+<text x="800" y="296" class="sub">déclenche un reset de FluidNC</text>
+<text x="796" y="348" class="monb">GPIO 33</text>
+<line x1="864" y1="344" x2="916" y2="344" class="inp"/>
+<circle cx="916" cy="344" r="3.5" fill="#2563eb"/>
+<line x1="916" y1="344" x2="936" y2="324" class="inp"/>
+<circle cx="960" cy="344" r="3.5" fill="#2563eb"/>
+<line x1="960" y1="344" x2="960" y2="376" class="gnd"/>
+<g class="gnd" transform="translate(960,376)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="916" y="316" class="tiny">coup-de-poing NO</text>
+<text x="800" y="424" class="lbl" fill="#b91c1c" font-weight="700">Impérativement un contact NO.</text>
+<text x="800" y="444" class="lbl">Un contact NC tiendrait la broche à 0 en</text>
+<text x="800" y="464" class="lbl">permanence : la carte partirait en boucle</text>
+<text x="800" y="484" class="lbl">de redémarrage sans jamais démarrer.</text>
+
+<!-- ================= LIGNE 2 : modules 3 fils ================= -->
+<rect x="60" y="530" width="300" height="250" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="1.8"/>
+<text x="80" y="558" class="lblb">Capteur Hall — index Z</text>
+<text x="80" y="576" class="sub">KY-003 · point mort haut de l'aiguille</text>
+<rect x="80" y="600" width="96" height="62" rx="6" fill="#f1f5f9" stroke="#475569" stroke-width="1.8"/>
+<text x="128" y="626" class="mono" text-anchor="middle">KY-003</text>
+<text x="128" y="644" class="tiny" text-anchor="middle">A3144</text>
+<line x1="176" y1="614" x2="228" y2="614" class="p5"/>
+<text x="234" y="618" class="lbl">+5 V</text>
+<line x1="176" y1="632" x2="228" y2="632" class="inp"/>
+<text x="234" y="636" class="monb">GPIO 22</text>
+<line x1="176" y1="650" x2="228" y2="650" class="gnd"/>
+<line x1="228" y1="650" x2="228" y2="672" class="gnd"/>
+<g class="gnd" transform="translate(228,672)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="80" y="712" class="lbl">Sortie à collecteur ouvert : elle ne fait</text>
+<text x="80" y="732" class="lbl">que tirer à la masse, le 5 V d'alimentation</text>
+<text x="80" y="752" class="lbl">n'atteint jamais le GPIO.</text>
+<text x="80" y="772" class="tiny">Unipolaire : ne réagit qu'à une face de l'aimant.</text>
+
+<rect x="420" y="530" width="300" height="250" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="1.8"/>
+<text x="440" y="558" class="lblb">Détecteur de casse-fil</text>
+<text x="440" y="576" class="sub">roue libre + aimant sur le trajet du fil</text>
+<rect x="440" y="600" width="96" height="62" rx="6" fill="#f1f5f9" stroke="#475569" stroke-width="1.8"/>
+<text x="488" y="626" class="mono" text-anchor="middle">Hall</text>
+<text x="488" y="644" class="tiny" text-anchor="middle">+ roue</text>
+<line x1="536" y1="614" x2="588" y2="614" class="p5"/>
+<text x="594" y="618" class="lbl">+5 V</text>
+<line x1="536" y1="632" x2="588" y2="632" class="inp"/>
+<text x="594" y="636" class="monb">GPIO 32</text>
+<line x1="536" y1="650" x2="588" y2="650" class="gnd"/>
+<line x1="588" y1="650" x2="588" y2="672" class="gnd"/>
+<g class="gnd" transform="translate(588,672)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="440" y="712" class="lbl">Le fil défile, la roue tourne, le capteur</text>
+<text x="440" y="732" class="lbl">émet des impulsions. Plus d'impulsions</text>
+<text x="440" y="752" class="lbl">pendant 5 ou 6 points → mise en pause.</text>
+<text x="440" y="772" class="tiny">FluidNC : feed_hold_pin: gpio.32:low:pu</text>
+
+<rect x="780" y="530" width="300" height="250" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.8"/>
+<text x="800" y="558" class="lblb">Servo de tension du fil</text>
+<text x="800" y="576" class="sub">axe A · SG90 ou MG90S</text>
+<rect x="800" y="600" width="96" height="62" rx="6" fill="#f1f5f9" stroke="#475569" stroke-width="1.8"/>
+<text x="848" y="626" class="mono" text-anchor="middle">servo</text>
+<text x="848" y="644" class="tiny" text-anchor="middle">3 fils</text>
+<line x1="896" y1="614" x2="948" y2="614" class="p5"/>
+<text x="954" y="618" class="lbl">+5 V (rouge)</text>
+<line x1="896" y1="632" x2="948" y2="632" class="inp"/>
+<text x="954" y="636" class="monb">GPIO 18</text>
+<line x1="896" y1="650" x2="948" y2="650" class="gnd"/>
+<line x1="948" y1="650" x2="948" y2="672" class="gnd"/>
+<g class="gnd" transform="translate(948,672)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="800" y="712" class="lbl" font-weight="700">Alimentation en 5 V, jamais en 3,3 V.</text>
+<text x="800" y="732" class="lbl">Il tire 100 à 250 mA en mouvement, bien</text>
+<text x="800" y="752" class="lbl">au-delà de ce que la sortie 3,3 V fournit.</text>
+<text x="800" y="772" class="tiny">Signal PWM 50 Hz · 1000 à 2000 µs</text>
+</svg>

@@ -1,0 +1,125 @@
+<svg viewBox="0 0 1140 620" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, sans-serif">
+<title>Schéma 1 — Alimentations</title>
+<desc>Arrivée secteur 230 V protégée par un interrupteur bipolaire et un fusible temporisé, terre de protection, trois alimentations séparées 48 V, 19,5 V et 5 V, condensateur de découplage sur le rail 19,5 V.</desc>
+<rect width="1140" height="620" fill="#ffffff"/>
+<style>
+  .h1  {fill:#111827;font-size:19px;font-weight:700;}
+  .lbl {fill:#1a1a1a;font-size:13px;}
+  .lblb{fill:#111827;font-size:13.5px;font-weight:700;}
+  .sub {fill:#6b7280;font-size:11.5px;}
+  .tiny{fill:#6b7280;font-size:10.5px;}
+  .term{fill:#111827;font-size:11px;font-family:ui-monospace,monospace;font-weight:700;}
+  .box {stroke-width:1.8;}
+  .ac  {stroke:#7c3aed;stroke-width:2.5;fill:none;}
+  .pe  {stroke:#65a30d;stroke-width:2.5;fill:none;}
+  .p48 {stroke:#dc2626;stroke-width:2.5;fill:none;}
+  .p24 {stroke:#ea580c;stroke-width:2.5;fill:none;}
+  .p5  {stroke:#16a34a;stroke-width:2.5;fill:none;}
+  .gnd {stroke:#334155;stroke-width:2;fill:none;}
+</style>
+
+<text x="24" y="32" class="h1">1 · Alimentations</text>
+<text x="24" y="52" class="sub">Trois sources séparées. Leurs « + » ne se rencontrent jamais, leurs « − » sont tous reliés.</text>
+
+<rect x="60" y="100" width="160" height="72" rx="8" fill="#faf5ff" stroke="#7c3aed" class="box"/>
+<text x="140" y="128" class="lblb" text-anchor="middle">Prise 230 V</text>
+<text x="140" y="148" class="sub" text-anchor="middle">phase · neutre · terre</text>
+
+<path d="M220 136 H280" class="ac"/>
+<rect x="280" y="100" width="210" height="72" rx="8" fill="#faf5ff" stroke="#7c3aed" class="box"/>
+<text x="385" y="126" class="lblb" text-anchor="middle">Interrupteur bipolaire</text>
+<text x="385" y="146" class="sub" text-anchor="middle">+ fusible temporisé T 2 A</text>
+<text x="385" y="162" class="tiny" text-anchor="middle">coupe la phase ET le neutre</text>
+
+<path d="M490 136 H1000" class="ac"/>
+<path d="M560 136 V200 M780 136 V200 M1000 136 V200" class="ac"/>
+<circle cx="560" cy="136" r="4" fill="#7c3aed"/>
+<circle cx="780" cy="136" r="4" fill="#7c3aed"/>
+
+<rect x="470" y="200" width="180" height="92" rx="8" fill="#fef2f2" stroke="#dc2626" class="box"/>
+<text x="560" y="226" class="lblb" text-anchor="middle">Mean Well</text>
+<text x="560" y="244" class="lblb" text-anchor="middle">LRS-100-48</text>
+<text x="560" y="264" class="sub" text-anchor="middle">48 V / 2,1 A — 100 W</text>
+<text x="524" y="286" class="term" text-anchor="middle">V+</text>
+<text x="596" y="286" class="term" text-anchor="middle">V−</text>
+
+<rect x="690" y="200" width="180" height="92" rx="8" fill="#fff7ed" stroke="#ea580c" class="box"/>
+<text x="780" y="226" class="lblb" text-anchor="middle">Bloc secteur HP</text>
+<text x="780" y="244" class="lblb" text-anchor="middle">19,5 V</text>
+<text x="780" y="264" class="sub" text-anchor="middle">7,69 A — 150 W (récup.)</text>
+<text x="744" y="286" class="term" text-anchor="middle">V+</text>
+<text x="816" y="286" class="term" text-anchor="middle">V−</text>
+
+<rect x="910" y="200" width="180" height="92" rx="8" fill="#f0fdf4" stroke="#16a34a" class="box"/>
+<text x="1000" y="226" class="lblb" text-anchor="middle">Chargeur USB</text>
+<text x="1000" y="244" class="lblb" text-anchor="middle">5 V</text>
+<text x="1000" y="264" class="sub" text-anchor="middle">2 A · câble data épais</text>
+<text x="964" y="286" class="term" text-anchor="middle">+</text>
+<text x="1036" y="286" class="term" text-anchor="middle">−</text>
+
+<path d="M524 292 V386" class="p48"/>
+<path d="M744 292 V386" class="p24"/>
+<path d="M964 292 V386" class="p5"/>
+<text x="514" y="336" class="tiny" text-anchor="end" fill="#dc2626">48 V</text>
+<text x="734" y="380" class="tiny" text-anchor="end" fill="#c2410c">19,5 V</text>
+<text x="954" y="336" class="tiny" text-anchor="end" fill="#15803d">5 V</text>
+
+<path d="M596 292 V318" class="gnd"/>
+<g class="gnd" transform="translate(596,318)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<path d="M816 292 V318" class="gnd"/>
+<g class="gnd" transform="translate(816,318)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<path d="M1036 292 V318" class="gnd"/>
+<g class="gnd" transform="translate(1036,318)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+
+<path d="M744 330 H700" class="p24"/>
+<path d="M700 330 V344" class="p24"/>
+<line x1="686" y1="344" x2="714" y2="344" stroke="#ea580c" stroke-width="3.5"/>
+<line x1="686" y1="352" x2="714" y2="352" stroke="#ea580c" stroke-width="3.5"/>
+<path d="M700 352 V364" class="gnd"/>
+<g class="gnd" transform="translate(700,364)"><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<circle cx="744" cy="330" r="4" fill="#ea580c"/>
+<text x="676" y="326" class="tiny" text-anchor="end" fill="#c2410c">1000 µF</text>
+<text x="676" y="340" class="tiny" text-anchor="end" fill="#c2410c">35 V</text>
+
+<rect x="470" y="386" width="180" height="76" rx="8" fill="#f8fafc" stroke="#475569" class="box"/>
+<text x="560" y="412" class="lblb" text-anchor="middle">DM542</text>
+<text x="560" y="432" class="sub" text-anchor="middle">axe Z — Nema 23</text>
+<text x="560" y="452" class="tiny" text-anchor="middle">bornes VCC et GND</text>
+
+<rect x="690" y="386" width="180" height="76" rx="8" fill="#f8fafc" stroke="#475569" class="box"/>
+<text x="780" y="412" class="lblb" text-anchor="middle">3 × DM320S</text>
+<text x="780" y="432" class="sub" text-anchor="middle">X, Y1, Y2 — Nema 17</text>
+<text x="780" y="452" class="tiny" text-anchor="middle">en parallèle sur le même rail</text>
+
+<rect x="910" y="386" width="180" height="76" rx="8" fill="#f8fafc" stroke="#475569" class="box"/>
+<text x="1000" y="412" class="lblb" text-anchor="middle">ESP32</text>
+<text x="1000" y="432" class="sub" text-anchor="middle">via sa prise micro-USB</text>
+<text x="1000" y="452" class="tiny" text-anchor="middle">sa broche 5V → 245 + servo</text>
+
+<path d="M140 172 V220" class="pe"/>
+<rect x="60" y="220" width="330" height="108" rx="8" fill="#f7fee7" stroke="#65a30d" class="box"/>
+<text x="76" y="244" class="lblb">Bornier de terre (vert/jaune)</text>
+<text x="76" y="266" class="lbl">Y raccorder, en étoile :</text>
+<text x="76" y="286" class="lbl">· la carcasse de chaque alimentation</text>
+<text x="76" y="304" class="lbl">· le châssis métallique de la machine</text>
+<text x="76" y="322" class="lbl">· le bâti de la Singer</text>
+
+<rect x="60" y="352" width="330" height="200" rx="8" fill="#f1f5f9" stroke="#475569" class="box"/>
+<text x="76" y="376" class="lblb">Le 0 V commun</text>
+<g class="gnd" transform="translate(340,382)"><line x1="0" y1="-14" x2="0" y2="0"/><line x1="-12" y1="0" x2="12" y2="0" stroke-width="3.5"/><line x1="-8" y1="7" x2="8" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="76" y="400" class="lbl">Ce symbole, partout sur les quatre</text>
+<text x="76" y="418" class="lbl">schémas, désigne un seul et même point.</text>
+<text x="76" y="444" class="lbl">Les « − » des trois alimentations y sont</text>
+<text x="76" y="462" class="lbl">reliés : sans cette référence commune,</text>
+<text x="76" y="480" class="lbl">les optocoupleurs des drivers ne voient</text>
+<text x="76" y="498" class="lbl">aucun signal.</text>
+<text x="76" y="522" class="tiny">Câblage en étoile depuis un point unique,</text>
+
+<rect x="470" y="486" width="620" height="102" rx="8" fill="#fef2f2" stroke="#dc2626" class="box"/>
+<text x="490" y="510" class="lblb" fill="#b91c1c">Les deux erreurs qui détruisent du matériel</text>
+<text x="490" y="534" class="lbl">1 · 48 V sur un DM320S. Ils acceptent 38 V au maximum, et on ne dépasse pas 80 %</text>
+<text x="506" y="552" class="lbl">de cette valeur. Étiquette physiquement tes deux alimentations.</text>
+<text x="490" y="576" class="lbl">2 · Débrancher un moteur alors que son driver est sous tension. La surtension le tue.</text>
+
+<text x="76" y="540" class="tiny">pas une guirlande d'un driver à l'autre.</text>
+</svg>
