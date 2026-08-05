@@ -9,7 +9,12 @@ Les schémas correspondants :
 - [3 · Drivers et moteurs](schema-3-puissance.svg)
 - [4 · Capteurs, arrêt d'urgence et servo](schema-4-capteurs.svg)
 
-> **0 V** désigne partout le même point : la masse commune. Voir le dernier tableau.
+> ⚠️ **Il y a deux réseaux de 0 V distincts**, et il ne faut pas les confondre :
+>
+> - **0 V logique** — l'ESP32, le 74HCT245, les capteurs, et les bornes `PUL−` `DIR−` `ENA−` des drivers
+> - **0 V puissance** — les « − » du 48 V et du 19,5 V, et les bornes `GND` des drivers
+>
+> Les optocoupleurs des drivers isolent ces deux réseaux. Voir le dernier tableau.
 
 ---
 
@@ -42,16 +47,16 @@ L'interrupteur doit couper **la phase et le neutre**. Le fusible temporisé (T) 
 | # | De | Vers | Section | Couleur |
 |---|---|---|---|---|
 | 2.1 | Mean Well V+ | DM542 (Z) — VCC | 0,75 mm² | rouge |
-| 2.2 | Mean Well V− | Masse commune | 0,75 mm² | noir |
+| 2.2 | Mean Well V− | 0 V puissance | 0,75 mm² | noir |
 | 2.3 | Bloc HP + | DM320S X — VCC | 0,75 mm² | rouge |
 | 2.4 | Bloc HP + | DM320S Y1 — VCC | 0,75 mm² | rouge |
 | 2.5 | Bloc HP + | DM320S Y2 — VCC | 0,75 mm² | rouge |
 | 2.6 | Bloc HP + | Condensateur 1000 µF / 35 V, borne + | 0,75 mm² | rouge |
-| 2.7 | Bloc HP − | Masse commune | 0,75 mm² | noir |
-| 2.8 | Condensateur, borne − | Masse commune | 0,75 mm² | noir |
+| 2.7 | Bloc HP − | 0 V puissance | 0,75 mm² | noir |
+| 2.8 | Condensateur, borne − | 0 V puissance | 0,75 mm² | noir |
 | 2.9 | ESP32 — broche 5V | 74HCT245 broche 20 (VCC) | 0,25 mm² | rouge |
 | 2.10 | ESP32 — broche 5V | 74HCT245 broche 1 (DIR) | 0,25 mm² | rouge |
-| 2.11 | ESP32 — broche GND | Masse commune | 0,5 mm² | noir |
+| 2.11 | ESP32 — broche GND | 0 V logique | 0,5 mm² | noir |
 
 Le condensateur se monte **au plus près des drivers**, bande blanche (borne −) côté masse. Les alimentations de PC portable coupent facilement sur l'énergie renvoyée par les moteurs en décélération.
 
@@ -82,8 +87,8 @@ Les lignes 3.7 et 3.8 partent bien du **même** GPIO 13 : un seul canal ne fourn
 |---|---|---|---|
 | 3.9 | broche 20 (VCC) | +5 V | alimentation |
 | 3.10 | broche 1 (DIR) | +5 V | sens de transfert A → B |
-| 3.11 | broche 19 (OE) | 0 V | active les sorties |
-| 3.12 | broche 10 (GND) | 0 V | masse |
+| 3.11 | broche 19 (OE) | 0 V logique | active les sorties |
+| 3.12 | broche 10 (GND) | 0 V logique | masse |
 
 **Si rien ne bouge nulle part, c'est ici.** Un DIR en l'air ou un OE non relié rend la puce muette, sans le moindre message d'erreur.
 
@@ -108,20 +113,26 @@ Les lignes 3.7 et 3.8 partent bien du **même** GPIO 13 : un seul canal ne fourn
 
 ---
 
-## 5 · Retours de masse des drivers
+## 5 · Retours des drivers
 
-Douze fils identiques, tous vers la masse commune. C'est répétitif, et c'est l'endroit où l'on oublie le plus souvent un fil.
+Attention : **deux destinations différentes** selon la borne.
 
-| # | De | Vers |
-|---|---|---|
-| 5.1 – 5.3 | DM320S X — PUL−, DIR−, ENA− | 0 V |
-| 5.4 | DM320S X — GND | 0 V |
-| 5.5 – 5.7 | DM320S Y1 — PUL−, DIR−, ENA− | 0 V |
-| 5.8 | DM320S Y1 — GND | 0 V |
-| 5.9 – 5.11 | DM320S Y2 — PUL−, DIR−, ENA− | 0 V |
-| 5.12 | DM320S Y2 — GND | 0 V |
-| 5.13 – 5.15 | DM542 Z — PUL−, DIR−, ENA− | 0 V |
-| 5.16 | DM542 Z — GND | 0 V |
+Les bornes `PUL−` `DIR−` `ENA−` sont du côté « entrée » de l'optocoupleur. Elles referment la boucle du signal et retournent au **0 V logique**, celui de la carte.
+
+La borne `GND` est du côté « puissance ». Elle retourne au **« − » de l'alimentation du driver**, directement, sans passer par la carte.
+
+| # | De | Vers | Section |
+|---|---|---|---|
+| 5.1 – 5.3 | DM320S X — PUL−, DIR−, ENA− | 0 V **logique** (J1) | 0,25 mm² |
+| 5.4 | DM320S X — GND | « − » du bloc HP 19,5 V | 0,75 mm² |
+| 5.5 – 5.7 | DM320S Y1 — PUL−, DIR−, ENA− | 0 V **logique** (J1) | 0,25 mm² |
+| 5.8 | DM320S Y1 — GND | « − » du bloc HP 19,5 V | 0,75 mm² |
+| 5.9 – 5.11 | DM320S Y2 — PUL−, DIR−, ENA− | 0 V **logique** (J1) | 0,25 mm² |
+| 5.12 | DM320S Y2 — GND | « − » du bloc HP 19,5 V | 0,75 mm² |
+| 5.13 – 5.15 | DM542 Z — PUL−, DIR−, ENA− | 0 V **logique** (J1) | 0,25 mm² |
+| 5.16 | DM542 Z — GND | « − » de la Mean Well 48 V | 0,75 mm² |
+
+C'est aussi ce qui explique les sections différentes : les retours de signal transportent 15 mA, les retours de puissance jusqu'à 2 A.
 
 ---
 
@@ -144,23 +155,27 @@ Résistances de bobine attendues : **2,6 Ω** sur les Nema 17, **0,9 Ω** sur le
 
 ## 7 · Capteurs, arrêt d'urgence et servo
 
+> **Pour l'instant, seules les lignes 7.1 à 7.4 et 7.7 à 7.9 sont à câbler.** Le détecteur de casse-fil, l'arrêt d'urgence et le servo ne sont pas encore installés, et leurs entrées sont commentées dans `fluidnc-config.yaml`. Les GPIO 18, 32 et 33 restent libres.
+>
+> ⚠️ Ne déclare jamais une entrée dans le YAML avant d'avoir câblé son capteur : une broche déclarée mais laissée en l'air capte le bruit des drivers et se déclenche toute seule.
+
 | # | De | Vers | Fils |
 |---|---|---|---|
 | 7.1 | Fin de course X — contact 1 | ESP32 GPIO 4 | 2 |
-| 7.2 | Fin de course X — contact 2 | 0 V | |
+| 7.2 | Fin de course X — contact 2 | 0 V logique | |
 | 7.3 | Fin de course Y — contact 1 | ESP32 GPIO 21 | 2 |
-| 7.4 | Fin de course Y — contact 2 | 0 V | |
-| 7.5 | Arrêt d'urgence — contact 1 | ESP32 GPIO 33 | 2 |
-| 7.6 | Arrêt d'urgence — contact 2 | 0 V | |
+| 7.4 | Fin de course Y — contact 2 | 0 V logique | |
+| 7.5 | Arrêt d'urgence — contact 1 | ESP32 GPIO 33 | *à venir* |
+| 7.6 | Arrêt d'urgence — contact 2 | 0 V logique | *à venir* |
 | 7.7 | Hall index Z (KY-003) — OUT | ESP32 GPIO 22 | 3 |
 | 7.8 | Hall index Z — VCC | +5 V | |
-| 7.9 | Hall index Z — GND | 0 V | |
-| 7.10 | Casse-fil (Hall) — OUT | ESP32 GPIO 32 | 3 |
+| 7.9 | Hall index Z — GND | 0 V logique | |
+| 7.10 | Casse-fil (Hall) — OUT | ESP32 GPIO 32 | *à venir* |
 | 7.11 | Casse-fil — VCC | +5 V | |
-| 7.12 | Casse-fil — GND | 0 V | |
-| 7.13 | Servo — signal (orange) | ESP32 GPIO 18 | 3 |
+| 7.12 | Casse-fil — GND | 0 V logique | |
+| 7.13 | Servo — signal (orange) | ESP32 GPIO 18 | *à venir* |
 | 7.14 | Servo — + (rouge) | +5 V | |
-| 7.15 | Servo — masse (marron) | 0 V | |
+| 7.15 | Servo — masse (marron) | 0 V logique | |
 
 Les contacts sont **normalement ouverts**. À vérifier au multimètre avant montage : relâché = circuit ouvert, actionné = continuité.
 
@@ -168,25 +183,39 @@ Le servo se raccorde au **5 V**, jamais au 3,3 V : il tire 100 à 250 mA en mouv
 
 ---
 
-## 8 · La masse commune
+## 8 · Les deux réseaux de 0 V
 
-Tout ce qui porte la mention « 0 V » dans les tableaux ci-dessus arrive **au même point physique**. Utilise un bornier ou une barre de cuivre, en étoile — pas une guirlande d'un driver à l'autre.
+### 0 V logique — la barre de la carte
 
-Y arrivent :
+C'est le bus en fil nu de la plaque perforée. Tout y arrive en étoile.
+
+| Origine | Nombre de fils |
+|---|---|
+| ESP32 — GND | 1 |
+| 74HCT245 — broches 10 et 19 | 2 |
+| Drivers — PUL−, DIR−, ENA− | 12 |
+| Capteurs et servo | 5 |
+
+Sans lui, la boucle du signal est ouverte : le courant qui traverse la LED de l'optocoupleur n'a pas de chemin de retour, et le driver ne voit rien.
+
+### 0 V puissance — au bornier des alimentations
 
 | Origine | Nombre de fils |
 |---|---|
 | Mean Well 48 V — V− | 1 |
 | Bloc HP 19,5 V — − | 1 |
 | Condensateur 1000 µF — − | 1 |
-| ESP32 — GND | 1 |
-| 74HCT245 — broches 10 et 19 | 2 |
-| Drivers — PUL−, DIR−, ENA−, GND | 16 |
-| Capteurs, bouton, servo | 5 |
+| Drivers — GND | 4 |
 
-Sans cette référence commune, les optocoupleurs des drivers ne voient aucun signal et rien ne bouge — alors que tout semble correctement câblé.
+### Faut-il relier les deux ?
 
-⚠️ **La masse est commune, les « + » ne le sont pas.** Le 48 V ne doit jamais rencontrer le 19,5 V ni le 5 V.
+**Non, ce n'est pas nécessaire.** Les entrées des DM320S et du DM542 sont optocouplées : elles sont galvaniquement isolées de la partie puissance du driver. C'est précisément ce pour quoi cette isolation existe, et la garder évite que le bruit de commutation des moteurs ne remonte sur la référence des signaux.
+
+Si tu constates un jour des comportements erratiques, tu pourras les relier — mais alors **en un seul point**, jamais deux, sous peine de créer une boucle de masse.
+
+⚠️ Les « + », eux, ne se rencontrent jamais. Le 48 V ne doit toucher ni le 19,5 V ni le 5 V.
+
+La **terre de protection** est encore une autre chose : elle protège les personnes, va sur les carcasses métalliques, et n'a de lien ni avec l'un ni avec l'autre de ces réseaux.
 
 ---
 
@@ -194,7 +223,8 @@ Sans cette référence commune, les optocoupleurs des drivers ne voient aucun si
 
 | Vérification | Attendu |
 |---|---|
-| Continuité entre les masses des trois alims | continuité |
+| Continuité entre les « − » du 48 V et du 19,5 V | continuité |
+| Continuité entre le 0 V logique et le 0 V puissance | circuit ouvert (normal) |
 | Continuité entre 48 V+ et 19,5 V+ | **circuit ouvert** |
 | Continuité entre chaque « + » et la masse | **circuit ouvert** |
 | Continuité GPIO 33 ↔ masse, bouton relâché | **circuit ouvert** |

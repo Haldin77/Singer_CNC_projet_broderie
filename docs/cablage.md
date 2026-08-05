@@ -28,7 +28,9 @@ Deux versions du même circuit, à faire dans cet ordre.
 
 Le circuit est strictement identique dans les deux cas.
 
-Le symbole de masse ⏚ désigne, sur les quatre schémas, un seul et même point physique.
+Le symbole de masse ⏚ désigne le **0 V logique**. Attention, il existe un second réseau : le **0 V puissance**, celui des « − » des alimentations et des bornes `GND` des drivers. Les optocoupleurs des drivers isolent les deux — ils n'ont pas besoin d'être reliés.
+
+> **État actuel du montage.** Le détecteur de casse-fil, l'arrêt d'urgence et le servo de tension ne sont pas encore installés : ils sont commentés dans `fluidnc-config.yaml`, et le post-processeur n'émet plus de commandes d'axe A par défaut. La machine tourne en 3 axes. Les schémas ci-dessous montrent la cible complète.
 
 > Les vues d'ensemble [`schema-cablage.svg`](schema-cablage.svg) et [`schema-electronique-complet.svg`](schema-electronique-complet.svg) restent dans le dépôt, mais elles sont denses. Préfère les quatre schémas ci-dessus pour le montage.
 

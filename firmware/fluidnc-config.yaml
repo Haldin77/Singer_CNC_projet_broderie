@@ -18,7 +18,9 @@ board: "ESP32 DevKitC 38 broches"
 
 stepping:
   engine: RMT
-  idle_ms: 250
+  # 255 = les moteurs restent alimentes en permanence. Indispensable ici :
+  # entre deux points, le cadre doit tenir sa position au centieme.
+  idle_ms: 255
   # Les DM542/DM320S sont optocouples : il leur faut des impulsions LARGES.
   # 4 us est un point de depart sur; descends progressivement si tu veux
   # plus de vitesse, mais des pas manques viennent presque toujours d'ici.
@@ -30,9 +32,12 @@ stepping:
 # Axes
 # --------------------------------------------------------------------------
 axes:
-  # Un seul signal ENABLE partage par les trois drivers.
-  # Cable en anode commune : le 74HCT245 tire la ligne a la masse pour activer.
-  shared_stepper_disable_pin: gpio.13:low
+  # Un seul signal ENABLE partage par les quatre drivers.
+  # PAS de suffixe :low. Sur les DM320S/DM542, alimenter l'optocoupleur ENA
+  # DESACTIVE le driver. FluidNC doit donc mettre la ligne au niveau haut
+  # pour desactiver, et au niveau bas pour activer -- c'est le comportement
+  # par defaut, sans attribut.
+  shared_stepper_disable_pin: gpio.13
 
   # ---- X ---------------------------------------------------------------
   # Nema 17, 1/16 de pas (3200 pas/tour), poulie GT2 20 dents (40 mm/tour)
@@ -135,45 +140,58 @@ axes:
         step_pin: gpio.17
         direction_pin: gpio.14
 
-  # ---- A : servo de debrayage de la tension du fil ---------------------
-  # Un petit servo (SG90/MG90S) pousse la tige de debrayage des disques de
-  # tension de la Singer. Pendant un gros saut, on relache la tension pour
+  # ==========================================================================
+  # DESACTIVE POUR L'INSTANT -- axe A : servo de debrayage de la tension
+  # ==========================================================================
+  # Le servo n'est pas encore installe : on ne sait pas ou le fixer sur la
+  # machine. La machine tourne donc en 3 axes (X, Y, Z).
+  #
+  # Pour le reactiver : enlever le '#' devant les lignes ci-dessous, verifier
+  # que GPIO 18 est libre, televerser et $Bye.
+  #
+  # Role : un petit servo (SG90/MG90S) pousse la tige de debrayage des disques
+  # de tension de la Singer. Pendant un gros saut, on relache la tension pour
   # que le fil se devide librement sans casser ni tirer le tissu.
   #   A0  = tension serree (repos, position broderie)
   #   A90 = tension relachee (pendant le saut)
-  # Le post-processeur insere les G0 A0/A90 autour des sauts longs.
   #
-  # rc_servo : la position de l'axe A (0 a 90) est mappee sur l'impulsion
-  # PWM du servo (1 a 2 ms). Signal sur GPIO 18 (libere par le WiFi).
-  a:
-    steps_per_mm: 1.000
-    max_rate_mm_per_min: 6000.000
-    acceleration_mm_per_sec2: 5000.000
-    max_travel_mm: 90.000
-    soft_limits: false
-    motor0:
-      rc_servo:
-        pwm_hz: 50
-        output_pin: gpio.18
-        min_pulse_us: 1000
-        max_pulse_us: 2000
+  # a:
+  #   steps_per_mm: 1.000
+  #   max_rate_mm_per_min: 6000.000
+  #   acceleration_mm_per_sec2: 5000.000
+  #   max_travel_mm: 90.000
+  #   soft_limits: false
+  #   motor0:
+  #     rc_servo:
+  #       pwm_hz: 50
+  #       output_pin: gpio.18
+  #       min_pulse_us: 1000
+  #       max_pulse_us: 2000
 
-# --------------------------------------------------------------------------
-# Entrees de controle
-# --------------------------------------------------------------------------
-control:
-  # Detecteur de casse-fil : roue libre sur le trajet du fil + capteur.
-  # Cable en arret de securite : si le fil ne defile plus, la machine s'arrete.
-  feed_hold_pin: gpio.32:low:pu
-  # Arret d'urgence (bouton coup-de-poing vers GND)
-  reset_pin: gpio.33:low:pu
-  # Pas de bouton cycle-start dedie : reprise via l'interface web ou un pendant.
+# ==========================================================================
+# DESACTIVE POUR L'INSTANT -- entrees de controle
+# ==========================================================================
+# Ni le detecteur de casse-fil ni le bouton d'arret d'urgence ne sont encore
+# installes. Les declarer alors que les fils ne sont pas cables ferait flotter
+# les entrees et provoquerait des declenchements fantomes -- voire le fameux
+# "Controller is in a reset loop" sur GPIO 33.
+#
+# Pour reactiver : enlever le '#', APRES avoir cable les capteurs.
+#
+# control:
+#   # Detecteur de casse-fil : roue libre sur le trajet du fil + capteur Hall.
+#   # Si le fil ne defile plus, la machine se met en pause.
+#   feed_hold_pin: gpio.32:low:pu
+#   # Arret d'urgence : bouton coup-de-poing, contact NO vers la masse.
+#   reset_pin: gpio.33:low:pu
+#
+# GPIO 18, 32 et 33 sont donc libres pour le moment.
 
 # --------------------------------------------------------------------------
 # Reseau : on brode en WiFi (pas de carte SD)
 # --------------------------------------------------------------------------
 # Le lecteur SD est abandonne au profit du WiFi : cela libere les GPIO
-# 5, 18, 19, 23 -- dont le 18 sert maintenant au servo de tension.
+# 5, 18, 19, 23. Le 18 est reserve au servo, pour quand il sera installe.
 #
 # Le WiFi se configure par commandes une fois FluidNC flashe (pas dans ce
 # YAML), par exemple :

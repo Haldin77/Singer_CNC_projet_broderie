@@ -72,7 +72,10 @@ class MachineConfig:
     jump_release_threshold: float = 25.0
 
     # --- Servo de debrayage de la tension du fil (axe A) ---
-    servo_enabled: bool = True
+    # Desactive par defaut : le servo n'est pas encore installe sur la machine,
+    # et l'axe A est commente dans fluidnc-config.yaml. Emettre des G0 A...
+    # provoquerait une erreur de gcode. Passer --servo quand il sera monte.
+    servo_enabled: bool = False
     servo_engaged_deg: float = 0.0     # tension serree (broderie)
     servo_released_deg: float = 90.0   # tension relachee (pendant le saut)
     servo_settle_s: float = 0.3        # temps de deplacement du servo
@@ -363,6 +366,10 @@ def main() -> int:
                    help="dimensions du cadre en mm, ex. 130x180")
     p.add_argument("--max-stitch", type=float, default=12.7,
                    help="longueur max d'un point en mm avant decoupage (defaut 12.7)")
+    p.add_argument("--servo", action="store_true",
+                   help="emettre les commandes de l'axe A (servo de tension du fil). "
+                        "A n'utiliser que si le servo est installe et l'axe A actif "
+                        "dans fluidnc-config.yaml.")
     args = p.parse_args()
 
     cfg = MachineConfig(
@@ -371,6 +378,7 @@ def main() -> int:
         hoop_x=args.hoop[0],
         hoop_y=args.hoop[1],
         max_stitch_len=args.max_stitch,
+        servo_enabled=args.servo,
     )
 
     pattern = pyembroidery.read(args.input)

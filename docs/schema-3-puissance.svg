@@ -15,7 +15,7 @@
 </style>
 
 <text x="24" y="32" class="h1">3 · Drivers et moteurs</text>
-<text x="24" y="52" class="sub">Chaque driver reçoit trois signaux du 74HCT245, trois retours à la masse, et sa propre alimentation.</text>
+<text x="24" y="52" class="sub">Chaque driver reçoit trois signaux du 74HCT245, leurs trois retours vers le 0 V logique, et sa propre alimentation.</text>
 
 <!-- ============ X ============ -->
 <rect x="60" y="80" width="470" height="192" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
@@ -26,10 +26,10 @@
 <text x="80" y="182" class="monb">DIR+</text><text x="140" y="182" class="lbl">← 245 broche 17 (B2)</text>
 <text x="80" y="204" class="monb">ENA+</text><text x="140" y="204" class="lbl">← 245 broche 12 (B7)</text>
 <text x="80" y="226" class="monb">VCC</text><text x="140" y="226" class="lbl">← 19,5 V</text>
-<text x="320" y="160" class="mono">PUL−</text><text x="380" y="160" class="lbl">→ 0 V</text>
-<text x="320" y="182" class="mono">DIR−</text><text x="380" y="182" class="lbl">→ 0 V</text>
-<text x="320" y="204" class="mono">ENA−</text><text x="380" y="204" class="lbl">→ 0 V</text>
-<text x="320" y="226" class="mono">GND</text><text x="380" y="226" class="lbl">→ 0 V</text>
+<text x="320" y="160" class="mono">PUL−</text><text x="380" y="160" class="lbl">→ 0 V logique</text>
+<text x="320" y="182" class="mono">DIR−</text><text x="380" y="182" class="lbl">→ 0 V logique</text>
+<text x="320" y="204" class="mono">ENA−</text><text x="380" y="204" class="lbl">→ 0 V logique</text>
+<text x="320" y="226" class="mono">GND</text><text x="380" y="226" class="lbl">→ − de l'alim</text>
 <text x="80" y="254" class="tiny">Bornes moteur : A+ A− B+ B−</text>
 <path d="M530 176 H600" class="coil"/>
 <text x="565" y="168" class="tiny" text-anchor="middle">4 fils</text>
@@ -48,10 +48,10 @@
 <text x="80" y="398" class="monb">DIR+</text><text x="140" y="398" class="lbl">← 245 broche 15 (B4)</text>
 <text x="80" y="420" class="monb">ENA+</text><text x="140" y="420" class="lbl">← 245 broche 11 (B8)</text>
 <text x="80" y="442" class="monb">VCC</text><text x="140" y="442" class="lbl">← 19,5 V</text>
-<text x="320" y="376" class="mono">PUL−</text><text x="380" y="376" class="lbl">→ 0 V</text>
-<text x="320" y="398" class="mono">DIR−</text><text x="380" y="398" class="lbl">→ 0 V</text>
-<text x="320" y="420" class="mono">ENA−</text><text x="380" y="420" class="lbl">→ 0 V</text>
-<text x="320" y="442" class="mono">GND</text><text x="380" y="442" class="lbl">→ 0 V</text>
+<text x="320" y="376" class="mono">PUL−</text><text x="380" y="376" class="lbl">→ 0 V logique</text>
+<text x="320" y="398" class="mono">DIR−</text><text x="380" y="398" class="lbl">→ 0 V logique</text>
+<text x="320" y="420" class="mono">ENA−</text><text x="380" y="420" class="lbl">→ 0 V logique</text>
+<text x="320" y="442" class="mono">GND</text><text x="380" y="442" class="lbl">→ − de l'alim</text>
 <text x="80" y="470" class="tiny">Bornes moteur : A+ A− B+ B−</text>
 <path d="M530 392 H600" class="coil"/>
 <text x="565" y="384" class="tiny" text-anchor="middle">4 fils</text>
@@ -69,10 +69,10 @@
 <text x="80" y="614" class="monb">DIR+</text><text x="140" y="614" class="lbl">← 245 broche 15 (B4)</text>
 <text x="80" y="636" class="monb">ENA+</text><text x="140" y="636" class="lbl">← 245 broche 11 (B8)</text>
 <text x="80" y="658" class="monb">VCC</text><text x="140" y="658" class="lbl">← 19,5 V</text>
-<text x="320" y="592" class="mono">PUL−</text><text x="380" y="592" class="lbl">→ 0 V</text>
-<text x="320" y="614" class="mono">DIR−</text><text x="380" y="614" class="lbl">→ 0 V</text>
-<text x="320" y="636" class="mono">ENA−</text><text x="380" y="636" class="lbl">→ 0 V</text>
-<text x="320" y="658" class="mono">GND</text><text x="380" y="658" class="lbl">→ 0 V</text>
+<text x="320" y="592" class="mono">PUL−</text><text x="380" y="592" class="lbl">→ 0 V logique</text>
+<text x="320" y="614" class="mono">DIR−</text><text x="380" y="614" class="lbl">→ 0 V logique</text>
+<text x="320" y="636" class="mono">ENA−</text><text x="380" y="636" class="lbl">→ 0 V logique</text>
+<text x="320" y="658" class="mono">GND</text><text x="380" y="658" class="lbl">→ − de l'alim</text>
 <text x="80" y="686" class="tiny">Mêmes fils que Y1 : les deux drivers sont en parallèle sur B3, B4 et B8.</text>
 <path d="M530 608 H600" class="coil"/>
 <text x="565" y="600" class="tiny" text-anchor="middle">4 fils</text>
@@ -90,10 +90,10 @@
 <text x="80" y="830" class="monb">DIR+</text><text x="140" y="830" class="lbl">← 245 broche 13 (B6)</text>
 <text x="80" y="852" class="monb">ENA+</text><text x="140" y="852" class="lbl">← 245 broche 12 (B7)</text>
 <text x="80" y="874" class="monb">VCC</text><text x="140" y="874" class="lbl">← 48 V</text>
-<text x="320" y="808" class="mono">PUL−</text><text x="380" y="808" class="lbl">→ 0 V</text>
-<text x="320" y="830" class="mono">DIR−</text><text x="380" y="830" class="lbl">→ 0 V</text>
-<text x="320" y="852" class="mono">ENA−</text><text x="380" y="852" class="lbl">→ 0 V</text>
-<text x="320" y="874" class="mono">GND</text><text x="380" y="874" class="lbl">→ 0 V</text>
+<text x="320" y="808" class="mono">PUL−</text><text x="380" y="808" class="lbl">→ 0 V logique</text>
+<text x="320" y="830" class="mono">DIR−</text><text x="380" y="830" class="lbl">→ 0 V logique</text>
+<text x="320" y="852" class="mono">ENA−</text><text x="380" y="852" class="lbl">→ 0 V logique</text>
+<text x="320" y="874" class="mono">GND</text><text x="380" y="874" class="lbl">→ − de l'alim</text>
 <text x="80" y="902" class="tiny" fill="#b91c1c">Seul driver alimenté en 48 V. Vérifier trois fois avant la mise sous tension.</text>
 <path d="M530 824 H600" class="coil"/>
 <text x="565" y="816" class="tiny" text-anchor="middle">4 fils</text>
@@ -103,9 +103,12 @@
 <text x="704" y="832" class="sub">réduction 2:1 par poulies</text>
 <text x="704" y="850" class="sub">1 point de broderie = 1 tour d'arbre</text>
 
-<g class="gnd" transform="translate(920,300)"><line x1="0" y1="-16" x2="0" y2="0"/><line x1="-13" y1="0" x2="13" y2="0" stroke-width="3.5"/><line x1="-9" y1="7" x2="9" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
-<text x="920" y="336" class="tiny" text-anchor="middle">« 0 V » = ce symbole</text>
-<text x="920" y="352" class="tiny" text-anchor="middle">= la masse commune</text>
+<g class="gnd" transform="translate(1012,86)"><line x1="0" y1="-16" x2="0" y2="0"/><line x1="-13" y1="0" x2="13" y2="0" stroke-width="3.5"/><line x1="-9" y1="7" x2="9" y2="7"/><line x1="-4" y1="14" x2="4" y2="14"/></g>
+<text x="1012" y="124" class="tiny" text-anchor="middle" font-weight="700">Deux retours distincts</text>
+<text x="1012" y="146" class="tiny" text-anchor="middle">PUL− DIR− ENA− → 0 V logique</text>
+<text x="1012" y="162" class="tiny" text-anchor="middle">GND → « − » de l'alimentation</text>
+<text x="1012" y="186" class="tiny" text-anchor="middle">Les optocoupleurs isolent les deux.</text>
+<text x="1012" y="202" class="tiny" text-anchor="middle">Rien n'oblige à les relier.</text>
 
 <rect x="60" y="944" width="1020" height="150" rx="10" fill="#f1f5f9" stroke="#475569" stroke-width="1.8"/>
 <text x="80" y="970" class="lblb">Repérer les bobines avant de brancher</text>
