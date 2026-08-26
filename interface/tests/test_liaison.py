@@ -27,7 +27,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from couture_pedale import CoutureAPedale                     # noqa: E402
+from couture_pedale import (CoutureAPedale,                   # noqa: E402
+                            DELAI_DEBRAYAGE_S)
 from envoi import Envoyeur                                    # noqa: E402
 from liaison import TAMPON_FLUIDNC, Fluid, Pedale             # noqa: E402
 
@@ -388,6 +389,43 @@ def main() -> int:
         delai is not None and delai < 0.2,
         "%.3f s (un point entier a l'ancienne vitesse aurait pris ~3 s)"
         % (delai if delai is not None else -1))
+
+    # ---- pedale : debrayage du volant a l'arret --------------------------
+    # Une premiere version de cette fonction echouait « la plupart du
+    # temps » : le feed hold gelait la file sans la vider, la carte restait
+    # en Hold et « $MD » -- refuse hors Idle -- ne partait jamais. Depuis
+    # 0x85, le planificateur est vide et la carte retombe en Idle. Ce test
+    # verrouille ce comportement.
+    print("\nPedale : debrayage du volant a l'arret")
+    uno.envoyer("P0")
+    time.sleep(0.3)
+    faux2.lignes.clear()
+
+    fin = time.time() + DELAI_DEBRAYAGE_S + 3.0
+    while time.time() < fin and not couture.roue_libre:
+        time.sleep(0.05)
+    tout_bon &= verifier("pedale au repos : les moteurs sont coupes",
+                         couture.roue_libre and "$MD" in faux2.lignes,
+                         "lignes recues : %s" % faux2.lignes[-3:])
+
+    rang = len(faux2.lignes)
+    fin = time.time() + 1.0
+    while time.time() < fin:
+        uno.envoyer("P40")
+        time.sleep(0.05)
+    reprise = [l for l in faux2.lignes[rang:] if l.upper().startswith("$J=")]
+    tout_bon &= verifier("rappuyer relance la couture sans rien de special",
+                         bool(reprise) and not couture.roue_libre,
+                         "%d jogs apres le debrayage" % len(reprise))
+
+    uno.envoyer("P0")
+    time.sleep(0.3)
+    couture.debrayage = False
+    couture.roue_libre = False
+    faux2.lignes.clear()
+    time.sleep(DELAI_DEBRAYAGE_S + 0.8)
+    tout_bon &= verifier("l'option coupee, rien n'est debraye",
+                         "$MD" not in faux2.lignes)
 
     couture.arreter()
     fluid2.fermer()

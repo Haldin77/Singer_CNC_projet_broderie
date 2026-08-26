@@ -263,6 +263,7 @@ def api_etat() -> object:
         "cadence": round(cadence_depuis_pedale(
             machine.pedale.valeur if machine.pedale else 0)),
         "active": bool(machine.couture and machine.couture.active),
+        "roue_libre": bool(machine.couture and machine.couture.roue_libre),
         "diagnostic": (machine.pedale.diagnostic if machine.pedale
                        else "non connectee"),
         "erreur": machine.couture.erreur if machine.couture else "",

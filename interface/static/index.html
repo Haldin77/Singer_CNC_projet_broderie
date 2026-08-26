@@ -183,8 +183,8 @@
       const p = d.pedale || {};
       $("c-cadence").textContent = p.cadence || 0;
       $("jauge").style.width = (p.valeur || 0) + "%";
-      $("jauge-texte").textContent = p.presente
-        ? (p.valeur + " %") : "pédale absente";
+      $("jauge-texte").textContent = !p.presente ? "pédale absente"
+        : (p.roue_libre ? "volant libre" : p.valeur + " %");
       // Une erreur de la boucle de couture prime : c'est elle qui explique
       // pourquoi le moteur ne bouge pas alors que la pédale répond.
       const souci = p.erreur || (p.presente ? "" : p.diagnostic);

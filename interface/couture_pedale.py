@@ -129,6 +129,41 @@ PERIODE_SONDAGE_S = 0.06
 # 0x85 -- Jog Cancel. Caractere temps reel : traite immediatement, hors file.
 ANNULER_JOG = b"\x85"
 
+# --- LE DEBRAYAGE : rendre le volant a la main ------------------------------
+# Pedale au repos depuis ce delai, « $MD » coupe le courant des moteurs et
+# l'arbre redevient manoeuvrable. Le premier jog suivant les realimente :
+# FluidNC reactive les drivers des qu'un mouvement demarre.
+#
+# Le delai evite de debrayer entre deux coups de pedale rapprochés, ou l'on
+# veut au contraire que l'arbre tienne sa position.
+#
+# UNE TENTATIVE PRECEDENTE AVAIT ECHOUE, et il vaut la peine de dire
+# pourquoi : avec des G1, relacher declenchait un feed hold, qui GELE la file
+# sans la vider. La machine restait en « Hold » avec du travail en attente,
+# jamais en « Idle », et « $MD » -- refuse hors repos -- ne partait donc
+# presque jamais. Depuis le passage aux jogs, 0x85 VIDE le planificateur et
+# la carte retombe en « Idle » aussitot : la condition est desormais
+# naturellement remplie.
+#
+# DEUX RESERVES, imposees par la machine et non par le code :
+#
+#   1. Les quatre drivers partagent une seule ligne ENABLE (gpio.13 dans le
+#      YAML). Debrayer Z debraye donc AUSSI X et Y : le cadre n'est plus
+#      tenu. Sans consequence en couture, ou il ne sert pas -- mais il faudra
+#      refaire le homing avant de broder.
+#
+#   2. FluidNC ne saura pas que le volant a tourne : ses compteurs ne bougent
+#      pas pendant que le courant est coupe. La position rapportee devient
+#      fausse des qu'on y touche, d'ou la relecture de reference au reappui,
+#      et le homing obligatoire avant toute broderie.
+#
+# Ce que le debrayage NE PEUT PAS enlever : le couple de detente (cogging),
+# du aux aimants permanents du rotor. Il subsiste moteur debranche, vaut 5 a
+# 10 % du couple de maintien, et se ressent comme un crantage. C'est
+# intrinsequement mecanique -- seul un debrayage physique le supprimerait.
+DELAI_DEBRAYAGE_S = 1.0
+DEBRAYER = "$MD"
+
 RE_MPOS_Z = re.compile(r"MPos:[-\d.]+,[-\d.]+,([-\d.]+)")
 
 # Cadences extremes, en points par minute.
@@ -171,6 +206,9 @@ class CoutureAPedale:
         self.active = False
         self.cadence = 0.0
         self.points = 0
+        # Debrayage automatique a l'arret, pour tourner le volant a la main.
+        self.debrayage = True
+        self.roue_libre = False
         # Derniere raison d'arret. Sans elle, une boucle qui s'interrompt
         # ressemble a une machine qui ne fait rien -- et on cherche le
         # probleme partout sauf la ou il est.
@@ -225,6 +263,30 @@ class CoutureAPedale:
         m = RE_MPOS_Z.search(self.fluid.etat or "")
         return float(m.group(1)) if m else None
 
+    def _debrayer(self) -> None:
+        """Coupe le courant des moteurs pour rendre le volant a la main.
+
+        On attend le repos avant d'envoyer « $MD » : la commande est refusee
+        hors etat Idle, et couper le courant pendant qu'un mouvement court
+        ferait perdre des pas sans que rien ne le signale.
+
+        On sonde comme le fait la boucle -- « ? » puis lecture du dernier
+        rapport recu. Passer par demander_etat() reviendrait a poser la
+        question en meme temps que la boucle et a ne jamais reconnaitre sa
+        propre reponse.
+        """
+        limite = time.time() + 2.0
+        while time.time() < limite:
+            self.fluid.brut(b"?")
+            time.sleep(PERIODE_SONDAGE_S)
+            if "<Idle" in (self.fluid.etat or ""):
+                break
+        else:
+            return                      # toujours en mouvement : on renonce
+
+        if self.fluid.ligne(DEBRAYER):
+            self.roue_libre = True
+
     def _pilotage(self) -> None:
         erreurs_au_depart = self.fluid.compteur_erreur
 
@@ -243,6 +305,7 @@ class CoutureAPedale:
         envoye_deg = 0.0          # tout ce qui a ete commande depuis le debut
         dernier_sondage = 0.0
         annule = False            # la file a ete videe, on attend un reappui
+        repos_depuis: float | None = None
 
         try:
             while not self._stop.is_set():
@@ -282,8 +345,20 @@ class CoutureAPedale:
                     if not annule and retard_deg > RELIQUAT_HOLD_DEG:
                         self.fluid.temps_reel(ANNULER_JOG)
                         annule = True
+
+                    if repos_depuis is None:
+                        repos_depuis = maintenant
+                    if (self.debrayage and not self.roue_libre
+                            and maintenant - repos_depuis >= DELAI_DEBRAYAGE_S):
+                        self._debrayer()
+                        # Le volant a pu bouger : la reference de position ne
+                        # vaut plus rien. On force la relecture au reappui.
+                        annule = True
                     time.sleep(0.01)
                     continue
+
+                repos_depuis = None
+                self.roue_libre = False   # le prochain jog realimente seul
 
                 if annule:
                     # On rappuie apres une annulation. Ce qui restait en file
