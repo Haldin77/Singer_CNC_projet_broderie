@@ -19,6 +19,18 @@ API="http://127.0.0.1:8091/api/etat"
 
 cd "$DEPOT"
 
+# Le depot doit TOUJOURS refleter origin a l'identique -- rien de local n'a
+# de raison d'exister ici. Sans cette ligne, la moindre difference oubliee
+# (un chmod fait a la main, un fichier edite en depannage) bloque « git
+# pull » indefiniment, tour de minuteur apres tour de minuteur, jusqu'a
+# intervention manuelle. Ce fut le cas en pratique : deploiement/
+# redeployer.sh avait recu un chmod +x jamais commite, et chaque passage
+# echouait avec « Your local changes... would be overwritten by merge ».
+#
+# --  seulement les fichiers SUIVIS : les fichiers non suivis (ex. des
+# journaux ou des sorties de test laisses par erreur) ne sont pas touches.
+git checkout --quiet -- .
+
 git fetch --quiet origin
 LOCAL=$(git rev-parse HEAD)
 DISTANT=$(git rev-parse '@{u}')
