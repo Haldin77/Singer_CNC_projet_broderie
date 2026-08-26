@@ -1,0 +1,12 @@
+[Unit]
+Description=Verifie toutes les 2 minutes si GitHub a du nouveau
+
+[Timer]
+# Premier passage 1 min apres le demarrage, puis toutes les 2 minutes.
+OnBootSec=1min
+OnUnitActiveSec=2min
+# Evite que plusieurs minuteurs du systeme se declenchent a la seconde pres.
+RandomizedDelaySec=15s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Redeploiement de l'interface brodeuse depuis GitHub
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/home/dilhan/apps/brodeuse/Singer_CNC_projet_broderie/deploiement/redeployer.sh
+
+# Le depot appartient a dilhan ; git refuse d'operer sur un depot dont le
+# proprietaire differe de l'utilisateur courant sans cette declaration.
+Environment=HOME=/root
+ExecStartPre=/usr/bin/git config --global --add safe.directory /home/dilhan/apps/brodeuse/Singer_CNC_projet_broderie

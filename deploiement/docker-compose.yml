@@ -4,10 +4,19 @@ services:
     container_name: brodeuse
     restart: unless-stopped
 
-    # 127.0.0.1 uniquement : rien n'ecoute sur le LAN. Le seul chemin
-    # d'acces est Caddy, qui parle en HTTPS sur le tailnet.
+    # Ecoute sur toutes les interfaces : accessible depuis le LAN en
+    # http://<IP_DU_SERVEUR>:8091, en plus du chemin HTTPS via Tailscale.
+    #
+    # A savoir : l'interface n'a AUCUNE authentification. Quiconque est sur
+    # ce reseau peut lancer une broderie ou deplacer les axes. Sur un LAN
+    # domestique sans acces externe (pas de redirection de port sur le
+    # routeur -- voir docs/deploiement-serveur.md), c'est le meme niveau de
+    # confiance qu'un objet connecte pose sur le reseau du salon.
+    #
+    # Pour revenir au HTTPS-par-Tailscale uniquement (recommande si le
+    # reseau est partage ou moins sur) : remets "127.0.0.1:8091:8091".
     ports:
-      - "127.0.0.1:8091:8091"
+      - "8091:8091"
 
     volumes:
       # Le depot lui-meme. Modifier un fichier sur l'hote et redemarrer le
