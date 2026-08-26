@@ -1,0 +1,18 @@
+# Noms stables pour les deux liaisons serie de la brodeuse.
+#
+# A copier dans /etc/udev/rules.d/99-brodeuse.rules sur le serveur, puis :
+#     sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# Sans cela, la carte est /dev/ttyUSB0 un jour et /dev/ttyUSB1 le lendemain
+# selon l'ordre de branchement -- et le serveur pilote l'arbre principal en
+# croyant parler a la pedale.
+#
+# Verifier les identifiants sur l'hote avec :  lsusb
+#   la carte  : Silicon Labs CP210x      10c4:ea60
+#   la pedale : QinHeng CH340            1a86:7523
+#
+# Si tu as plusieurs adaptateurs du meme modele, ajoute ATTRS{serial}=="..."
+# (visible dans : udevadm info -a -n /dev/ttyUSB0 | grep serial)
+
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="brodeuse-carte", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="brodeuse-pedale", GROUP="dialout", MODE="0660"

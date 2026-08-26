@@ -1,0 +1,37 @@
+services:
+  brodeuse:
+    build: .
+    container_name: brodeuse
+    restart: unless-stopped
+
+    # 127.0.0.1 uniquement : rien n'ecoute sur le LAN. Le seul chemin
+    # d'acces est Caddy, qui parle en HTTPS sur le tailnet.
+    ports:
+      - "127.0.0.1:8091:8091"
+
+    volumes:
+      # Le depot lui-meme. Modifier un fichier sur l'hote et redemarrer le
+      # conteneur suffit -- pas de reconstruction d'image.
+      - /home/dilhan/apps/brodeuse/Singer_CNC_projet_broderie:/app
+      # /dev en entier plutot que « devices: ». Un ESP32 qui se reinitialise
+      # disparait puis revient sous un nouveau noeud ; avec « devices: », le
+      # noeud est fige a la creation du conteneur et la liaison reste morte
+      # jusqu'au redemarrage. Avec /dev monte, la reconnexion est vue.
+      - /dev:/dev
+
+    # Autorise l'ouverture des tty USB sans passer le conteneur en
+    # privileged. 188 = ttyUSB (CP210x de la carte), 166 = ttyACM.
+    device_cgroup_rules:
+      - 'c 188:* rmw'
+      - 'c 166:* rmw'
+
+    # 20 = groupe « dialout » sur Ubuntu, proprietaire des ports serie.
+    # A verifier sur l'hote : getent group dialout
+    group_add:
+      - "20"
+
+    command: >
+      python serveur.py
+      --port 8091
+      --fluidnc /dev/brodeuse-carte
+      --pedale /dev/brodeuse-pedale

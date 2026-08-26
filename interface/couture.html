@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Singer — mode couture</title>
+<!--
+  Page autonome : aucun serveur, aucun Python. Deux facons de l'ouvrir.
+
+  1. Depuis le disque -- double-clic sur le fichier. La page demande
+     l'adresse de la carte et lui parle directement par le reseau.
+  2. Depuis l'ESP32, si un jour FluidNC accepte de la servir en tant que
+     page : http://192.168.1.7/couture.html
+
+  Securite : la couture avance par salves de quelques points, renouvelees
+  tant que la pedale est maintenue. Si le WiFi coupe, la machine s'arrete
+  d'elle-meme au bout d'une salve -- elle n'attend pas un ordre d'arret qui
+  pourrait ne jamais arriver.
+-->
+<style>
+  :root {
+    --fond:#0f172a; --carte:#1e293b; --bord:#334155; --texte:#e2e8f0;
+    --doux:#94a3b8; --accent:#38bdf8; --ok:#22c55e; --alerte:#f59e0b; --danger:#ef4444;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    margin:0; padding:16px; background:var(--fond); color:var(--texte);
+    font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;
+    max-width:640px; margin-inline:auto;
+  }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .soustitre { color:var(--doux); font-size:13px; margin:0 0 20px; }
+  .carte { background:var(--carte); border:1px solid var(--bord);
+           border-radius:12px; padding:16px; margin-bottom:14px; }
+
+  .etat { display:flex; align-items:center; gap:12px; }
+  .pastille { width:12px; height:12px; border-radius:50%; background:var(--doux); flex-shrink:0; }
+  .pastille.idle{background:var(--ok);} .pastille.jog{background:var(--accent);animation:pulse 1s infinite;}
+  .pastille.alarm{background:var(--danger);} .pastille.hold{background:var(--alerte);}
+  .pastille.off{background:var(--bord);}
+  @keyframes pulse { 50% { opacity:.35; } }
+  .etat-nom { font-weight:700; font-size:16px; }
+  .etat-detail { color:var(--doux); font-size:12px; margin-left:auto; text-align:right; }
+
+  .compteurs { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+  .compteur { text-align:center; }
+  .compteur .valeur { font-size:30px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .compteur .nom { font-size:11px; color:var(--doux); text-transform:uppercase; letter-spacing:.5px; }
+
+  label.bloc { display:block; font-size:13px; color:var(--doux); margin-bottom:10px; }
+  .cadence-valeur { color:var(--texte); font-weight:700; font-size:17px; }
+  input[type=range] { width:100%; accent-color:var(--accent); height:28px; }
+  .reperes { display:flex; justify-content:space-between; font-size:11px; color:var(--doux); }
+
+  #pedale {
+    width:100%; padding:34px 16px; font-size:21px; font-weight:700;
+    color:#06202e; background:var(--accent); border:none; border-radius:14px;
+    cursor:pointer; touch-action:none; user-select:none;
+    transition:transform .06s, background .12s;
+  }
+  #pedale.enfoncee { transform:scale(.975); background:var(--ok); }
+  #pedale:disabled { background:var(--bord); color:var(--doux); cursor:not-allowed; }
+  .aide { font-size:12px; color:var(--doux); text-align:center; margin-top:10px; }
+
+  .rangee { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  button.sec { padding:13px 10px; font-size:14px; font-weight:600; color:var(--texte);
+               background:#0b1220; border:1px solid var(--bord); border-radius:9px; cursor:pointer; }
+  button.sec:hover { border-color:var(--accent); }
+  button.sec.large { grid-column:1/-1; }
+  button.sec.danger { color:var(--danger); border-color:#7f1d1d; }
+
+  #journal { font-family:ui-monospace,monospace; font-size:11.5px; color:var(--doux);
+             max-height:130px; overflow-y:auto; white-space:pre-wrap; line-height:1.55; }
+  #journal .err { color:var(--danger); } #journal .ok { color:var(--ok); }
+
+  #bloc-adresse { display:none; }
+  #bloc-adresse.visible { display:block; }
+  .ligne-adresse { display:flex; gap:10px; }
+  input[type=text] {
+    flex:1; padding:11px 12px; font-size:15px; font-family:ui-monospace,monospace;
+    color:var(--texte); background:#0b1220; border:1px solid var(--bord); border-radius:9px;
+  }
+  input[type=text]:focus { outline:none; border-color:var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>Brodeuse Singer</h1>
+<p class="soustitre">Mode couture — seul l'arbre principal tourne, le cadre reste parqué.</p>
+
+<div class="carte" id="bloc-adresse">
+  <label class="bloc" for="adresse">Adresse de la carte FluidNC</label>
+  <div class="ligne-adresse">
+    <input type="text" id="adresse" value="192.168.1.7" spellcheck="false"
+           autocomplete="off" inputmode="decimal">
+    <button class="sec" id="b-connecter">Connecter</button>
+  </div>
+</div>
+
+<div class="carte">
+  <div class="etat">
+    <span class="pastille off" id="pastille"></span>
+    <span class="etat-nom" id="etat-nom">Connexion…</span>
+    <span class="etat-detail" id="etat-detail"></span>
+  </div>
+  <div class="compteurs">
+    <div class="compteur"><div class="valeur" id="c-points">—</div><div class="nom">points cousus</div></div>
+    <div class="compteur"><div class="valeur" id="c-angle">—</div><div class="nom">angle d'arbre</div></div>
+  </div>
+</div>
+
+<div class="carte">
+  <label class="bloc" for="cadence">
+    Cadence : <span class="cadence-valeur" id="cadence-valeur">100</span> points/min
+  </label>
+  <input type="range" id="cadence" min="20" max="500" step="10" value="100">
+  <div class="reperes"><span>20 — réglage</span><span>150 — courant</span><span>500 — max</span></div>
+</div>
+
+<div class="carte">
+  <button id="pedale" disabled>MAINTENIR POUR COUDRE</button>
+  <p class="aide">Barre d'espace, ou le doigt sur tablette.<br>
+     La machine s'arrête d'elle-même si la liaison est coupée.</p>
+</div>
+
+<div class="carte">
+  <div class="rangee">
+    <button class="sec large" id="b-homing">Homing + parcage du cadre</button>
+    <button class="sec" id="b-un-point">Un seul point</button>
+    <button class="sec" id="b-aiguille">Aiguille en haut</button>
+    <button class="sec" id="b-deverrouiller">Déverrouiller ($X)</button>
+    <button class="sec danger" id="b-stop">ARRÊT</button>
+  </div>
+</div>
+
+<div class="carte"><div id="journal"></div></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // --- reglages -----------------------------------------------------------
+  const DEG = 360;             // un point de broderie = un tour d'arbre
+  const PARK_X = 84.5;         // parcage du cadre, coordonnees machine
+  const PARK_Y = 5.0;
+  const POINTS_SALVE = 2;      // longueur d'une salve, en points
+  const JOG_CANCEL = "%85";    // caractere temps reel d'annulation de jog
+
+  const $ = (id) => document.getElementById(id);
+  const pedale = $("pedale"), journal = $("journal");
+
+  let enCours = false, pret = false, minuteur = null, derniereErreur = "";
+  let occupe = false;   // homing en cours : on suspend le rafraichissement
+                        // pour ne JAMAIS avoir deux connexions ouvertes vers
+                        // le petit serveur de l'ESP32.
+
+  // --- ou joindre la carte ------------------------------------------------
+  // Si la page est servie par l'ESP32, on reste en chemin relatif : meme
+  // origine, rien a configurer. Si elle est ouverte depuis le disque, il
+  // faut une adresse absolue -- et le navigateur exigera alors que FluidNC
+  // reponde avec un en-tete CORS.
+  const DEPUIS_DISQUE = (location.protocol === "file:");
+  let BASE = "";
+
+  function chargerAdresse() {
+    let ip = "192.168.1.7";
+    try { ip = localStorage.getItem("brodeuse.ip") || ip; } catch (e) { /* mode prive */ }
+    return ip;
+  }
+  function enregistrerAdresse(ip) {
+    try { localStorage.setItem("brodeuse.ip", ip); } catch (e) { /* mode prive */ }
+  }
+  function appliquerAdresse(ip) {
+    ip = ip.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    BASE = "http://" + ip;
+    enregistrerAdresse(ip);
+  }
+
+  // --- dialogue avec FluidNC ---------------------------------------------
+  // « plain= » et surtout PAS « commandText= » : avec commandText, FluidNC
+  // demarre la commande et repond immediatement, le resultat partant sur la
+  // WebSocket. Avec plain, le texte revient dans la reponse HTTP -- c'est
+  // indispensable pour lire « ? ».
+  async function envoyer(cmd) {
+    return brut("/command?plain=" + encodeURIComponent(cmd));
+  }
+  async function tempsReel(code) {
+    return brut("/command?plain=" + code);
+  }
+  async function brut(chemin) {
+    let r;
+    try {
+      r = await fetch(BASE + chemin, { cache: "no-store" });
+    } catch (e) {
+      // fetch ne distingue pas "injoignable" de "bloque par CORS" : dans les
+      // deux cas c'est un TypeError sans detail. On le signale tel quel.
+      throw new Error("liaison");
+    }
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.text();
+  }
+
+  function log(msg, type) {
+    const l = document.createElement("div");
+    if (type) l.className = type;
+    l.textContent = new Date().toLocaleTimeString("fr-FR") + "  " + msg;
+    journal.prepend(l);
+    while (journal.childElementCount > 40) journal.lastElementChild.remove();
+  }
+
+  // --- lecture de l'etat --------------------------------------------------
+  const CLASSES = { Idle:"idle", Run:"jog", Jog:"jog", Home:"jog",
+                    Alarm:"alarm", Hold:"hold", Door:"hold", Check:"hold", Sleep:"off" };
+
+  function analyser(t) {
+    const infos = {};
+    let m = t.match(/<([A-Za-z]+)[|:]/);       if (m) infos.etat = m[1];
+    m = t.match(/MPos:([-\d.]+),([-\d.]+),([-\d.]+)/);
+    if (m) {
+      infos.mpos = { x:+m[1], y:+m[2], z:+m[3] };
+      infos.points = Math.floor(infos.mpos.z / DEG);
+      infos.angle = infos.mpos.z % DEG;        // 0 = point mort haut
+    }
+    return infos;
+  }
+
+  async function rafraichir() {
+    if (occupe) return;
+    try {
+      const d = analyser(await envoyer("?"));
+      if (!d.etat) throw new Error("réponse illisible");
+      pret = true; derniereErreur = "";
+      $("pastille").className = "pastille " + (CLASSES[d.etat] || "off");
+      $("etat-nom").textContent = d.etat;
+      $("etat-detail").textContent = d.mpos
+        ? "X " + d.mpos.x.toFixed(1) + "   Y " + d.mpos.y.toFixed(1) : "";
+      if (d.points !== undefined) $("c-points").textContent = d.points;
+      if (d.angle  !== undefined) $("c-angle").textContent = d.angle.toFixed(0) + "°";
+
+      pedale.disabled = (d.etat === "Alarm");
+      pedale.textContent = d.etat === "Alarm"
+        ? "ALARME — faire un homing d'abord" : "MAINTENIR POUR COUDRE";
+    } catch (e) {
+      pret = false; pedale.disabled = true;
+      $("pastille").className = "pastille off";
+      $("etat-nom").textContent = "Hors ligne";
+      $("etat-detail").textContent = "";
+      if (String(e) !== derniereErreur) {
+        derniereErreur = String(e);
+        if (e.message === "liaison" && DEPUIS_DISQUE) {
+          log("Pas de réponse. Deux causes possibles :", "err");
+          log("  1. l'adresse est fausse, ou la carte est éteinte", "err");
+          log("  2. FluidNC refuse les requêtes venant d'un fichier local", "err");
+          log("  Ouvre la console du navigateur (F12) : si tu y lis « CORS »,", "err");
+          log("  c'est le cas 2 — il faudra passer par interface/serveur.py.", "err");
+        } else {
+          log("Carte injoignable.", "err");
+        }
+      }
+    }
+  }
+
+  // --- pedale -------------------------------------------------------------
+  // On n'envoie PAS un long mouvement qu'il faudrait annuler : on envoie de
+  // courtes salves renouvelees tant que la pedale est tenue. Si la liaison
+  // tombe, plus rien n'arrive et la machine s'arrete toute seule.
+  function cadence() { return Number($("cadence").value); }
+
+  async function salve() {
+    if (!enCours) return;
+    try {
+      await envoyer("$J=G91 Z" + (POINTS_SALVE * DEG) + " F" + (cadence() * DEG));
+    } catch (e) {
+      log("Salve perdue, arrêt.", "err");
+      arreter();
+      return;
+    }
+    if (!enCours) return;
+    // On relance a 60 % de la duree d'une salve : la file d'attente reste
+    // alimentee, le mouvement ne saccade pas, et au pire on s'arrete au
+    // bout de deux points.
+    const dureeMs = (POINTS_SALVE / cadence()) * 60000;
+    minuteur = setTimeout(salve, Math.max(150, dureeMs * 0.6));
+  }
+
+  function demarrer() {
+    if (enCours || !pret || pedale.disabled) return;
+    enCours = true;
+    pedale.classList.add("enfoncee");
+    salve();
+  }
+
+  async function arreter() {
+    if (!enCours) return;
+    enCours = false;
+    clearTimeout(minuteur);
+    pedale.classList.remove("enfoncee");
+    // Chemin rapide : si la liaison tient, l'arret est immediat.
+    // Si elle ne tient pas, l'absence de salve suivante suffit.
+    try { await tempsReel(JOG_CANCEL); } catch (e) { /* filet de securite deja en place */ }
+  }
+
+  ["pointerdown","touchstart"].forEach(ev =>
+    pedale.addEventListener(ev, e => { e.preventDefault(); demarrer(); }));
+  ["pointerup","pointercancel","pointerleave","touchend","touchcancel"].forEach(ev =>
+    pedale.addEventListener(ev, e => { e.preventDefault(); arreter(); }));
+
+  window.addEventListener("blur", arreter);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) arreter(); });
+  document.addEventListener("keydown", e => {
+    if (e.code === "Space" && !e.repeat) { e.preventDefault(); demarrer(); } });
+  document.addEventListener("keyup", e => {
+    if (e.code === "Space") { e.preventDefault(); arreter(); } });
+
+  $("cadence").addEventListener("input", e => {
+    $("cadence-valeur").textContent = e.target.value; });
+
+  // --- boutons ------------------------------------------------------------
+  $("b-homing").addEventListener("click", async () => {
+    log("Homing en cours, ne touche à rien…");
+    occupe = true;
+    $("etat-nom").textContent = "Homing…";
+    try {
+      await envoyer("$H");
+      await envoyer("G53 G0 X" + PARK_X + " Y" + PARK_Y);
+      log("Homing fait, cadre parqué.", "ok");
+    } catch (e) { log("Échec du homing : " + e, "err"); }
+    finally { occupe = false; rafraichir(); }
+  });
+
+  $("b-un-point").addEventListener("click", async () => {
+    try { await envoyer("$J=G91 Z" + DEG + " F" + (cadence() * DEG)); log("Un point."); }
+    catch (e) { log("Échec : " + e, "err"); }
+  });
+
+  $("b-aiguille").addEventListener("click", async () => {
+    try {
+      const d = analyser(await envoyer("?"));
+      if (!d.mpos) { log("Position illisible.", "err"); return; }
+      const reste = DEG - (d.mpos.z % DEG);
+      if (reste < 5) { log("Déjà au point mort haut.", "ok"); return; }
+      await envoyer("$J=G91 Z" + reste.toFixed(3) + " F" + (30 * DEG));
+      log("Aiguille remontée.", "ok");
+    } catch (e) { log("Échec : " + e, "err"); }
+  });
+
+  $("b-deverrouiller").addEventListener("click", async () => {
+    try { await envoyer("$X"); log("Déverrouillé.", "ok"); }
+    catch (e) { log("Échec : " + e, "err"); }
+  });
+
+  $("b-stop").addEventListener("click", async () => { await arreter(); log("Arrêt demandé."); });
+
+  // --- demarrage ----------------------------------------------------------
+  if (DEPUIS_DISQUE) {
+    $("bloc-adresse").classList.add("visible");
+    $("adresse").value = chargerAdresse();
+    appliquerAdresse(chargerAdresse());
+    $("b-connecter").addEventListener("click", () => {
+      appliquerAdresse($("adresse").value);
+      derniereErreur = "";
+      log("Connexion à " + BASE + "…");
+      rafraichir();
+    });
+    $("adresse").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") $("b-connecter").click();
+    });
+    log("Page ouverte depuis le disque — adresse de la carte : " + BASE);
+  } else {
+    log("Page servie par la carte.");
+  }
+
+  log("Interface prête. Homing recommandé avant de coudre.");
+  rafraichir();
+  setInterval(rafraichir, 500);
+})();
+</script>
+</body>
+</html>

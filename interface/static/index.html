@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brodeuse Singer — couture à la pédale</title>
+<style>
+  :root {
+    --fond:#0f172a; --carte:#1e293b; --bord:#334155; --texte:#e2e8f0;
+    --doux:#94a3b8; --accent:#38bdf8; --ok:#22c55e; --alerte:#f59e0b; --danger:#ef4444;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:20px; background:var(--fond); color:var(--texte);
+         font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;
+         max-width:640px; margin-inline:auto; }
+  a { color:var(--accent); }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .soustitre { color:var(--doux); font-size:13px; margin:0 0 20px; }
+  .carte { background:var(--carte); border:1px solid var(--bord);
+           border-radius:12px; padding:16px; margin-bottom:14px; }
+
+  .etat { display:flex; align-items:center; gap:12px; }
+  .pastille { width:12px; height:12px; border-radius:50%; background:var(--doux); flex-shrink:0; }
+  .pastille.idle{background:var(--ok);} .pastille.run{background:var(--accent);animation:pulse 1s infinite;}
+  .pastille.alarm{background:var(--danger);} .pastille.hold{background:var(--alerte);}
+  .pastille.off{background:var(--bord);}
+  @keyframes pulse { 50% { opacity:.35; } }
+  .etat-nom { font-weight:700; font-size:16px; }
+  .etat-detail { color:var(--doux); font-size:12px; margin-left:auto; text-align:right; }
+
+  .compteurs { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:14px; }
+  .compteur { text-align:center; }
+  .compteur .valeur { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .compteur .nom { font-size:10.5px; color:var(--doux); text-transform:uppercase; letter-spacing:.5px; }
+
+  /* --- pedale --- */
+  .jauge { height:26px; background:#0b1220; border-radius:13px; overflow:hidden;
+           border:1px solid var(--bord); position:relative; }
+  .jauge-remplie { height:100%; width:0; background:var(--accent); transition:width .1s linear; }
+  .jauge-texte { position:absolute; inset:0; display:flex; align-items:center;
+                 justify-content:center; font-size:12.5px; font-weight:700;
+                 color:var(--texte); mix-blend-mode:difference; }
+  .absente { color:var(--danger); font-size:12.5px; text-align:center; margin-top:10px; }
+
+  label { display:block; font-size:12.5px; color:var(--doux); margin-bottom:6px; }
+  select { width:100%; padding:9px 10px; font-size:14px; color:var(--texte);
+           background:#0b1220; border:1px solid var(--bord); border-radius:8px; }
+  .paire { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  button { font-family:inherit; font-size:14px; font-weight:600; cursor:pointer;
+           border-radius:9px; padding:13px 12px; border:1px solid var(--bord);
+           background:#0b1220; color:var(--texte); width:100%; }
+  button:hover:not(:disabled) { border-color:var(--accent); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.gros { padding:22px; font-size:17px; }
+  button.on { background:var(--ok); color:#052e16; border-color:var(--ok); }
+  button.danger { color:var(--danger); border-color:#7f1d1d; }
+  .rangee { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .rangee.trois { grid-template-columns:1fr 1fr 1fr; }
+
+  #journal { font-family:ui-monospace,monospace; font-size:11.5px; color:var(--doux);
+             max-height:120px; overflow-y:auto; white-space:pre-wrap; line-height:1.55; }
+  #journal .err { color:var(--danger); } #journal .ok { color:var(--ok); }
+</style>
+</head>
+<body>
+
+<h1>Brodeuse Singer</h1>
+<p class="soustitre">Mode couture à la pédale · <a href="/">Mode broderie</a></p>
+
+<div class="carte">
+  <div class="etat">
+    <span class="pastille off" id="pastille"></span>
+    <span class="etat-nom" id="etat-nom">Connexion…</span>
+    <span class="etat-detail" id="etat-detail"></span>
+  </div>
+
+  <div id="bloc-ports" style="margin-top:14px">
+    <div class="paire">
+      <div>
+        <label for="port-fluidnc">Carte FluidNC</label>
+        <select id="port-fluidnc"></select>
+      </div>
+      <div>
+        <label for="port-pedale">Pédale</label>
+        <select id="port-pedale"></select>
+      </div>
+    </div>
+    <div class="rangee" style="margin-top:10px">
+      <button id="b-identifier">Identifier les ports</button>
+      <button id="b-connecter">Connecter</button>
+    </div>
+  </div>
+
+  <div class="compteurs">
+    <div class="compteur"><div class="valeur" id="c-points">—</div><div class="nom">points</div></div>
+    <div class="compteur"><div class="valeur" id="c-angle">—</div><div class="nom">angle d'arbre</div></div>
+    <div class="compteur"><div class="valeur" id="c-cadence">—</div><div class="nom">points/min</div></div>
+  </div>
+</div>
+
+<div class="carte">
+  <div class="jauge">
+    <div class="jauge-remplie" id="jauge"></div>
+    <div class="jauge-texte" id="jauge-texte">pédale</div>
+  </div>
+  <div class="absente" id="pedale-absente" style="display:none"></div>
+</div>
+
+<div class="carte">
+  <button class="gros" id="b-pedale" disabled>ACTIVER LA PÉDALE</button>
+  <p class="soustitre" style="text-align:center;margin:12px 0 0">
+    Une fois activée, la machine coud tant que tu appuies.<br>
+    Elle s'arrête d'elle-même si la pédale cesse de répondre.
+  </p>
+</div>
+
+<div class="carte">
+  <div class="rangee trois">
+    <button id="b-un-point">Un point</button>
+    <button id="b-aiguille">Aiguille haute</button>
+    <button id="b-deverrouiller">Déverrouiller</button>
+  </div>
+  <div class="rangee" style="margin-top:10px">
+    <button id="b-homing">Homing</button>
+    <button id="b-parquer">Parquer le cadre</button>
+  </div>
+  <div style="margin-top:10px">
+    <button class="danger" id="b-arret">ARRÊT</button>
+  </div>
+</div>
+
+<div class="carte"><div id="journal"></div></div>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const journal = $("journal");
+  let connectee = false, pedaleActive = false;
+
+  function log(msg, type) {
+    const l = document.createElement("div");
+    if (type) l.className = type;
+    l.textContent = new Date().toLocaleTimeString("fr-FR") + "  " + msg;
+    journal.prepend(l);
+    while (journal.childElementCount > 40) journal.lastElementChild.remove();
+  }
+
+  async function poster(chemin, corps) {
+    const opt = { method: "POST" };
+    if (corps) {
+      opt.headers = { "Content-Type": "application/json" };
+      opt.body = JSON.stringify(corps);
+    }
+    return (await fetch(chemin, opt)).json();
+  }
+
+  const CLASSES = { Idle:"idle", Run:"run", Jog:"run", Home:"run",
+                    Alarm:"alarm", Hold:"hold", Door:"hold", Sleep:"off" };
+
+  async function rafraichir() {
+    try {
+      const d = await (await fetch("/api/etat")).json();
+      connectee = !!d.connectee;
+      $("bloc-ports").style.display = connectee ? "none" : "";
+
+      if (!connectee) {
+        $("pastille").className = "pastille off";
+        $("etat-nom").textContent = "Non connectée";
+        $("etat-detail").textContent = "";
+        $("b-pedale").disabled = true;
+        return;
+      }
+
+      $("pastille").className = "pastille " + (CLASSES[d.etat] || "off");
+      $("etat-nom").textContent = d.etat;
+      $("etat-detail").textContent = d.mpos
+        ? "X " + d.mpos.x.toFixed(1) + "   Y " + d.mpos.y.toFixed(1) : "";
+      if (d.points !== undefined) $("c-points").textContent = d.points;
+      if (d.angle !== undefined) $("c-angle").textContent = d.angle.toFixed(0) + "°";
+
+      const p = d.pedale || {};
+      $("c-cadence").textContent = p.cadence || 0;
+      $("jauge").style.width = (p.valeur || 0) + "%";
+      $("jauge-texte").textContent = p.presente
+        ? (p.valeur + " %") : "pédale absente";
+      // Une erreur de la boucle de couture prime : c'est elle qui explique
+      // pourquoi le moteur ne bouge pas alors que la pédale répond.
+      const souci = p.erreur || (p.presente ? "" : p.diagnostic);
+      $("pedale-absente").style.display = souci ? "" : "none";
+      $("pedale-absente").textContent = souci || "";
+
+      $("b-pedale").disabled = !p.presente || d.etat === "Alarm";
+      pedaleActive = !!p.active;
+      $("b-pedale").className = "gros" + (pedaleActive ? " on" : "");
+      $("b-pedale").textContent = pedaleActive
+        ? "PÉDALE ACTIVE — cliquer pour couper"
+        : (d.etat === "Alarm" ? "ALARME — déverrouille d'abord"
+                              : "ACTIVER LA PÉDALE");
+    } catch (e) {
+      connectee = false;
+      $("pastille").className = "pastille off";
+      $("etat-nom").textContent = "Serveur hors ligne";
+    }
+  }
+
+  async function chargerPorts() {
+    try {
+      const d = await (await fetch("/api/ports")).json();
+      const remplir = (id, suggestion) => {
+        const s = $(id); s.innerHTML = "";
+        d.ports.forEach(p => s.appendChild(
+          new Option(p.port + " — " + (p.description || p.devine), p.port)));
+        if (suggestion) s.value = suggestion;
+      };
+      remplir("port-fluidnc", d.suggestion_fluidnc);
+      remplir("port-pedale", d.suggestion_pedale);
+    } catch (e) { /* plus tard */ }
+  }
+
+  $("b-identifier").addEventListener("click", async () => {
+    const b = $("b-identifier");
+    b.disabled = true; b.textContent = "Écoute des ports…";
+    log("Chaque port est ouvert et écouté — les cartes vont redémarrer.");
+    try {
+      const d = await poster("/api/identifier");
+      if (!d.ok) { log(d.erreur, "err"); return; }
+      Object.entries(d.roles).forEach(([p, r]) => log("  " + p + " : " + r));
+      if (d.fluidnc) $("port-fluidnc").value = d.fluidnc;
+      if (d.pedale) $("port-pedale").value = d.pedale;
+      log(d.pedale ? "Pédale trouvée sur " + d.pedale
+                   : "Aucune pédale identifiée.", d.pedale ? "ok" : "err");
+    } finally {
+      b.disabled = false; b.textContent = "Identifier les ports";
+    }
+  });
+
+  $("b-connecter").addEventListener("click", async () => {
+    const d = await poster("/api/connecter", {
+      fluidnc: $("port-fluidnc").value, pedale: $("port-pedale").value });
+    log(d.ok ? (d.avertissement || "Connectée.") : d.erreur, d.ok ? "ok" : "err");
+    rafraichir();
+  });
+
+  $("b-pedale").addEventListener("click", async () => {
+    const d = await poster("/api/couture/pedale", { actif: !pedaleActive });
+    if (!d.ok) { log(d.erreur, "err"); rafraichir(); return; }
+    log(d.actif ? "Pédale active." : "Pédale coupée.", "ok");
+    rafraichir();
+  });
+
+  $("b-un-point").addEventListener("click", async () => {
+    const d = await poster("/api/couture/un-point");
+    log(d.ok ? "Un point." : d.erreur, d.ok ? "ok" : "err");
+  });
+  $("b-aiguille").addEventListener("click", async () => {
+    await poster("/api/couture/aiguille-haute"); log("Aiguille remontée.", "ok");
+  });
+  $("b-deverrouiller").addEventListener("click", async () => {
+    const d = await poster("/api/deverrouiller");
+    log(d.ok ? "Déverrouillé." : "Échec.", d.ok ? "ok" : "err");
+  });
+  $("b-homing").addEventListener("click", async () => {
+    log("Homing en cours, ne touche à rien…");
+    const d = await poster("/api/homing");
+    log(d.ok ? "Homing terminé." : d.erreur, d.ok ? "ok" : "err");
+  });
+  $("b-parquer").addEventListener("click", async () => {
+    await poster("/api/couture/parquer"); log("Cadre parqué.", "ok");
+  });
+  $("b-arret").addEventListener("click", async () => {
+    await poster("/api/couture/pedale", { actif: false });
+    log("Arrêt demandé.", "err");
+    rafraichir();
+  });
+
+  chargerPorts();
+  rafraichir();
+  setInterval(rafraichir, 300);
+})();
+</script>
+</body>
+</html>

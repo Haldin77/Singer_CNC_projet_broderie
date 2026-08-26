@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brodeuse Singer — broderie</title>
+<style>
+  :root {
+    --fond:#0f172a; --carte:#1e293b; --bord:#334155; --texte:#e2e8f0;
+    --doux:#94a3b8; --accent:#38bdf8; --ok:#22c55e; --alerte:#f59e0b; --danger:#ef4444;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; padding:20px; background:var(--fond); color:var(--texte);
+    font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;
+    max-width:1080px; margin-inline:auto;
+  }
+  a { color:var(--accent); }
+  h1 { font-size:21px; margin:0 0 4px; }
+  h2 { font-size:14px; margin:0 0 14px; color:var(--doux);
+       text-transform:uppercase; letter-spacing:.6px; font-weight:700; }
+  .soustitre { color:var(--doux); font-size:13px; margin:0 0 20px; }
+  .carte { background:var(--carte); border:1px solid var(--bord);
+           border-radius:12px; padding:18px; margin-bottom:16px; }
+  .colonnes { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
+  @media (max-width:820px) { .colonnes { grid-template-columns:1fr; } }
+
+  /* --- etat machine --- */
+  .etat { display:flex; align-items:center; gap:12px; }
+  .pastille { width:11px; height:11px; border-radius:50%; background:var(--doux); flex-shrink:0; }
+  .pastille.idle{background:var(--ok);} .pastille.run{background:var(--accent);animation:pulse 1s infinite;}
+  .pastille.alarm{background:var(--danger);} .pastille.hold{background:var(--alerte);}
+  .pastille.off{background:var(--bord);}
+  @keyframes pulse { 50% { opacity:.35; } }
+  .etat-nom { font-weight:700; } .etat-detail { color:var(--doux); font-size:12px; margin-left:auto; }
+
+  /* --- depot d'image --- */
+  #depot {
+    border:2px dashed var(--bord); border-radius:12px; padding:34px 18px;
+    text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+  }
+  #depot:hover, #depot.survol { border-color:var(--accent); background:#0b1220; }
+  #depot .gros { font-size:15px; font-weight:600; }
+  #depot .petit { font-size:12px; color:var(--doux); margin-top:6px; }
+  #depot img { max-width:100%; max-height:170px; border-radius:8px; }
+  input[type=file] { display:none; }
+
+  /* --- reglages --- */
+  .champ { margin-bottom:15px; }
+  .champ:last-child { margin-bottom:0; }
+  label { display:block; font-size:12.5px; color:var(--doux); margin-bottom:6px; }
+  label .v { color:var(--texte); font-weight:700; }
+  input[type=range] { width:100%; accent-color:var(--accent); height:24px; }
+  select, input[type=number] {
+    width:100%; padding:9px 10px; font-size:14px; color:var(--texte);
+    background:#0b1220; border:1px solid var(--bord); border-radius:8px;
+  }
+  .paire { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .case { display:flex; align-items:center; gap:9px; font-size:13px; color:var(--texte); }
+  .case input { accent-color:var(--accent); width:17px; height:17px; }
+  .repli { border-top:1px solid var(--bord); margin-top:15px; padding-top:15px; }
+  .repli summary { cursor:pointer; font-size:12.5px; color:var(--doux); }
+
+  /* --- boutons --- */
+  button {
+    font-family:inherit; font-size:14px; font-weight:600; cursor:pointer;
+    border-radius:9px; padding:13px 14px; border:1px solid var(--bord);
+    background:#0b1220; color:var(--texte); width:100%;
+  }
+  button:hover:not(:disabled) { border-color:var(--accent); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.primaire { background:var(--accent); color:#06202e; border-color:var(--accent); font-size:15px; }
+  button.lancer { background:var(--ok); color:#052e16; border-color:var(--ok);
+                  font-size:16px; padding:17px; }
+  button.danger { color:var(--danger); border-color:#7f1d1d; }
+  .rangee { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .rangee button { width:auto; }
+
+  /* --- apercu --- */
+  #apercu { min-height:180px; display:flex; align-items:center; justify-content:center; }
+  #apercu .vide { color:var(--doux); font-size:13px; text-align:center; }
+  #apercu svg { width:100%; height:auto; border-radius:8px; }
+  .legende { display:flex; gap:16px; font-size:11.5px; color:var(--doux);
+             margin-top:10px; justify-content:center; flex-wrap:wrap; }
+  .legende i { display:inline-block; width:14px; height:2px; vertical-align:middle;
+               margin-right:5px; }
+
+  /* --- stats --- */
+  .stats { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:14px; }
+  .stat { text-align:center; background:#0b1220; border-radius:8px; padding:10px 4px; }
+  .stat .v { font-size:19px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat .n { font-size:10px; color:var(--doux); text-transform:uppercase; letter-spacing:.4px; }
+
+  /* --- messages --- */
+  .avert { background:#422006; border:1px solid #a16207; color:#fde68a;
+           border-radius:9px; padding:11px 13px; font-size:12.5px; margin-top:12px; }
+  .erreur { background:#450a0a; border:1px solid #b91c1c; color:#fecaca;
+            border-radius:9px; padding:11px 13px; font-size:12.5px; margin-top:12px; }
+  .succes { background:#052e16; border:1px solid #15803d; color:#bbf7d0;
+            border-radius:9px; padding:11px 13px; font-size:12.5px; margin-top:12px; }
+
+  /* --- barre d'avancement --- */
+  .barre { height:8px; background:#0b1220; border-radius:4px; overflow:hidden; }
+  .barre-remplie { height:100%; width:0; background:var(--ok); transition:width .3s; }
+  .ligne-envoi { display:flex; justify-content:space-between;
+                 font-size:11.5px; color:var(--doux); margin-top:7px; }
+
+  .liste-controle { font-size:12.5px; color:var(--doux); line-height:1.8; margin:0; padding-left:20px; }
+  .liste-controle b { color:var(--texte); }
+  .attente { opacity:.55; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<h1>Brodeuse Singer</h1>
+<p class="soustitre">
+  Image → broderie. Champ utile 165 × 114 mm. ·
+  <a href="/couture">Mode couture</a>
+</p>
+
+<div class="carte">
+  <div class="etat">
+    <span class="pastille off" id="pastille"></span>
+    <span class="etat-nom" id="etat-nom">Connexion…</span>
+    <span class="etat-detail" id="etat-detail"></span>
+  </div>
+
+  <div id="bloc-ports" style="margin-top:14px">
+    <div class="paire">
+      <div>
+        <label for="port-fluidnc">Carte FluidNC</label>
+        <select id="port-fluidnc"></select>
+      </div>
+      <div>
+        <label for="port-pedale">Pédale (facultatif)</label>
+        <select id="port-pedale"></select>
+      </div>
+    </div>
+    <div class="rangee" style="margin-top:10px">
+      <button id="b-connecter">Connecter</button>
+      <button id="b-deconnecter">Déconnecter</button>
+    </div>
+  </div>
+
+  <div id="bloc-envoi" style="display:none; margin-top:14px">
+    <div class="barre"><div class="barre-remplie" id="barre"></div></div>
+    <div class="ligne-envoi">
+      <span id="envoi-texte">—</span>
+      <span id="envoi-reste"></span>
+    </div>
+  </div>
+</div>
+
+<div class="colonnes">
+
+  <!-- ================= colonne gauche : reglages ================= -->
+  <div>
+    <div class="carte">
+      <h2>1 · L'image</h2>
+      <div id="depot">
+        <div class="gros">Dépose une image ou un fichier de broderie</div>
+        <div class="petit">
+          <b>PNG, JPG</b> — dessins au trait, logos, silhouettes<br>
+          <b>DST, PES, EXP, JEF</b> — déjà numérisé, les réglages sont ignorés
+        </div>
+      </div>
+      <input type="file" id="fichier"
+             accept="image/*,.dst,.pes,.exp,.jef,.vp3,.pec,.xxx,.hus,.sew">
+    </div>
+
+    <div class="carte">
+      <h2>2 · Les réglages</h2>
+
+      <div class="champ paire">
+        <div>
+          <label for="largeur">Largeur max <span class="v" id="v-largeur">80</span> mm</label>
+          <input type="range" id="largeur" min="10" max="165" step="5" value="80">
+        </div>
+        <div>
+          <label for="hauteur">Hauteur max <span class="v" id="v-hauteur">80</span> mm</label>
+          <input type="range" id="hauteur" min="10" max="114" step="5" value="80">
+        </div>
+      </div>
+
+      <div class="champ">
+        <label for="mode">Rendu</label>
+        <select id="mode">
+          <option value="contour+remplissage">Contour et remplissage</option>
+          <option value="contour">Contour seul — trait fin, rapide</option>
+          <option value="remplissage">Remplissage seul — aplat</option>
+        </select>
+      </div>
+
+      <div class="champ case" style="background:#0b1220;border:1px solid var(--accent);
+           border-radius:9px;padding:11px 13px">
+        <input type="checkbox" id="auto" checked>
+        <label for="auto" style="margin:0">
+          <b>Réglages automatiques</b> — mesure le dessin et choisit tout seul
+        </label>
+      </div>
+
+      <div class="champ case">
+        <input type="checkbox" id="bourdon" checked>
+        <label for="bourdon" style="margin:0">
+          Traits fins en <b>point de bourdon</b> — ruban satiné sur leur axe
+        </label>
+      </div>
+      <div class="champ case">
+        <input type="checkbox" id="souscouche" checked>
+        <label for="souscouche" style="margin:0">
+          <b>Sous-couche</b> — stabilise le tissu, réduit le fronçage
+        </label>
+      </div>
+
+      <div class="champ">
+        <label for="seuil">
+          Seuil de noir <span class="v" id="v-seuil">automatique</span>
+        </label>
+        <input type="range" id="seuil" min="0" max="255" step="5" value="128">
+        <div class="case" style="margin-top:9px">
+          <input type="checkbox" id="seuil-auto" checked>
+          <label for="seuil-auto" style="margin:0">Laisser la machine décider</label>
+        </div>
+      </div>
+
+      <div class="champ case">
+        <input type="checkbox" id="inverser">
+        <label for="inverser" style="margin:0">Inverser — mon dessin est clair sur fond sombre</label>
+      </div>
+
+      <details class="repli">
+        <summary>Réglages fins</summary>
+        <div style="margin-top:14px">
+          <div class="champ">
+            <label for="point">Longueur d'un point <span class="v" id="v-point">2.5</span> mm</label>
+            <input type="range" id="point" min="1.5" max="5" step="0.1" value="2.5">
+          </div>
+          <div class="champ">
+            <label for="espacement">Écartement du remplissage <span class="v" id="v-espacement">0.45</span> mm</label>
+            <input type="range" id="espacement" min="0.3" max="2" step="0.05" value="0.45">
+          </div>
+          <div class="champ">
+            <label for="angle">Angle du remplissage <span class="v" id="v-angle">0</span>°</label>
+            <input type="range" id="angle" min="0" max="90" step="15" value="0">
+          </div>
+          <div class="champ">
+            <label for="liaison">
+              Relier les trajets distants de moins de <span class="v" id="v-liaison">5</span> mm
+            </label>
+            <input type="range" id="liaison" min="0" max="15" step="1" value="5">
+            <div class="reperes"><span>0 — que des sauts</span><span>15 — un maximum de liaisons</span></div>
+          </div>
+          <div class="champ">
+            <label for="traversee">
+              Traverser en brodant jusqu'à <span class="v" id="v-traversee">30</span> mm
+            </label>
+            <input type="range" id="traversee" min="0" max="60" step="5" value="30">
+            <div class="reperes">
+              <span>0 — que des sauts, donc des pauses</span>
+              <span>60 — aucune pause</span>
+            </div>
+          </div>
+          <div class="champ">
+            <label for="largeur_trait">
+              Traiter en bourdon les traits jusqu'à <span class="v" id="v-largeur_trait">2.5</span> mm
+            </label>
+            <input type="range" id="largeur_trait" min="0.5" max="6" step="0.5" value="2.5">
+          </div>
+          <div class="champ">
+            <label for="densite_bourdon">
+              Densité du bourdon <span class="v" id="v-densite_bourdon">0.4</span> mm
+            </label>
+            <input type="range" id="densite_bourdon" min="0.25" max="1" step="0.05" value="0.4">
+          </div>
+          <div class="champ">
+            <label for="seuil_simple">
+              En dessous de <span class="v" id="v-seuil_simple">1.0</span> mm,
+              trait simple au lieu du bourdon
+            </label>
+            <input type="range" id="seuil_simple" min="0.4" max="3" step="0.1" value="1.0">
+            <div class="reperes">
+              <span>0.4 — presque tout en bourdon</span>
+              <span>3 — beaucoup de traits simples</span>
+            </div>
+          </div>
+          <div class="champ">
+            <label for="bourdon_min">
+              Épaisseur minimale du ruban <span class="v" id="v-bourdon_min">1.0</span> mm
+            </label>
+            <input type="range" id="bourdon_min" min="0.6" max="3" step="0.1" value="1.0">
+          </div>
+          <div class="champ">
+            <label for="compensation">
+              Compensation d'étirement <span class="v" id="v-compensation">0.2</span> mm
+            </label>
+            <input type="range" id="compensation" min="0" max="0.8" step="0.05" value="0.2">
+          </div>
+          <div class="champ">
+            <label for="largeur_min">
+              Largeur minimale brodable <span class="v" id="v-largeur_min">1.2</span> mm
+            </label>
+            <input type="range" id="largeur_min" min="0.8" max="2" step="0.1" value="1.2">
+          </div>
+          <div class="champ case">
+            <input type="checkbox" id="epaissir" checked>
+            <label for="epaissir" style="margin:0">Épaissir les traits sous ce minimum</label>
+          </div>
+          <div class="champ case">
+            <input type="checkbox" id="triple" checked>
+            <label for="triple" style="margin:0">Contour en triple passage — trait plus marqué</label>
+          </div>
+          <div class="champ">
+            <label for="cadence">Cadence <span class="v" id="v-cadence">200</span> points/min</label>
+            <input type="range" id="cadence" min="60" max="500" step="10" value="200">
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <button class="primaire" id="b-convertir" disabled>Convertir et prévisualiser</button>
+  </div>
+
+  <!-- ================= colonne droite : apercu ================= -->
+  <div>
+    <div class="carte">
+      <h2>3 · L'aperçu</h2>
+      <div id="apercu"><div class="vide">Le tracé des points s'affichera ici.<br>
+        Le rectangle représente ton champ de broderie.</div></div>
+      <div class="legende" id="legende" style="display:none">
+        <span><i style="background:#38bdf8"></i>contour</span>
+        <span><i style="background:#e879f9"></i>bourdon</span>
+        <span><i style="background:#fbbf24"></i>trait simple</span>
+        <span><i style="background:#475569"></i>sous-couche</span>
+        <span><i style="background:#22c55e"></i>remplissage</span>
+        <span><i style="background:#f59e0b"></i>sauts</span>
+        <span id="lg-chauds" style="display:none"><i style="width:9px;height:9px;
+          border-radius:50%;background:none;border:1.5px solid #ef4444"></i>zones surchargées</span>
+      </div>
+      <div class="stats" id="stats" style="display:none">
+        <div class="stat"><div class="v" id="s-points">—</div><div class="n">points</div></div>
+        <div class="stat"><div class="v" id="s-minutes">—</div><div class="n">minutes</div></div>
+        <div class="stat"><div class="v" id="s-pauses">—</div><div class="n">pauses pied</div></div>
+        <div class="stat"><div class="v" id="s-traversees">—</div><div class="n">fils à couper</div></div>
+        <div class="stat"><div class="v" id="s-fil">—</div><div class="n">m de fil</div></div>
+      </div>
+      <div id="messages"></div>
+    </div>
+
+    <div class="carte" id="bloc-lancement">
+      <h2>4 · Broder</h2>
+      <ol class="liste-controle">
+        <li><b>Pied à repriser</b> monté, <b>barre de pied abaissée</b></li>
+        <li><b>Griffes escamotées</b></li>
+        <li>Tissu tendu dans le cadre, <b>entoilage dessous</b></li>
+        <li>Fil du haut enfilé <b>pied relevé</b>, tension réduite d'un tiers</li>
+        <li><b>Ne prépare pas encore le fil de canette</b></li>
+      </ol>
+      <div style="margin-bottom:12px">
+        <button id="b-homing">Homing des trois axes</button>
+      </div>
+      <div class="avert" style="background:#082f49;border-color:#0369a1;color:#bae6fd">
+        La machine se place au premier point et s'arrête.
+        C'est <b>là</b> que tu remontes le fil de canette et que tu tiens les
+        deux fils vers l'arrière — puis tu reprends avec <b>~</b>.
+      </div>
+      <div style="margin-top:16px">
+        <button class="lancer" id="b-lancer" disabled>Broder — machine homée</button>
+      </div>
+      <div class="rangee" style="margin-top:10px">
+        <button id="b-pause">Pause</button>
+        <button id="b-reprendre">Reprendre</button>
+      </div>
+      <div class="rangee" style="margin-top:10px">
+        <button id="b-telecharger" disabled>Télécharger le .nc</button>
+        <button class="danger" id="b-arret">Arrêt</button>
+      </div>
+      <div id="messages-lancement"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  let imageChoisie = null;
+  let motifPret = false;
+  let occupe = false;      // une opération longue est en cours côté serveur
+
+  // ---------------------------------------------------------------- etat
+  const CLASSES = { Idle:"idle", Run:"run", Jog:"run", Home:"run",
+                    Alarm:"alarm", Hold:"hold", Door:"hold", Sleep:"off" };
+
+  let connectee = false;
+
+  async function rafraichir() {
+    if (occupe) return;
+    try {
+      const d = await (await fetch("/api/etat")).json();
+      connectee = !!d.connectee;
+
+      if (!connectee) {
+        $("pastille").className = "pastille off";
+        $("etat-nom").textContent = "Non connectée";
+        $("etat-detail").textContent = "choisis le port de la carte";
+        $("bloc-ports").style.display = "";
+        $("bloc-envoi").style.display = "none";
+        return;
+      }
+
+      $("bloc-ports").style.display = "none";
+      $("pastille").className = "pastille " + (CLASSES[d.etat] || "off");
+      $("etat-nom").textContent = d.etat;
+
+      let detail = d.mpos
+        ? "X " + d.mpos.x.toFixed(1) + "   Y " + d.mpos.y.toFixed(1)
+          + "   " + (d.points || 0) + " pts"
+        : "";
+      if (d.pedale && d.pedale.presente) {
+        detail += "   ·   pédale " + d.pedale.valeur + " % ("
+                + d.pedale.cadence + " pts/min)";
+      }
+      $("etat-detail").textContent = detail;
+
+      // Avancement de l'envoi
+      const e = d.envoi;
+      if (e && (e.etat === "envoi" || e.etat === "pause"
+                || e.etat === "erreur")) {
+        $("bloc-envoi").style.display = "";
+        $("barre").style.width = e.pourcent + "%";
+        $("envoi-texte").textContent =
+          (e.etat === "pause" ? "En pause — " : "")
+          + e.faites + " / " + e.total + " lignes  (" + e.pourcent + " %)";
+        $("envoi-reste").textContent = e.minutes_restantes > 0
+          ? "≈ " + e.minutes_restantes + " min restantes" : "";
+        if (e.etat === "erreur" && e.message) {
+          messages("messages-lancement", [["erreur", e.message]]);
+        }
+      } else {
+        $("bloc-envoi").style.display = "none";
+      }
+    } catch (err) {
+      connectee = false;
+      $("pastille").className = "pastille off";
+      $("etat-nom").textContent = "Serveur hors ligne";
+      $("etat-detail").textContent = "";
+    }
+  }
+
+  // ---------------------------------------------------------------- ports
+  async function chargerPorts() {
+    try {
+      const d = await (await fetch("/api/ports")).json();
+      const remplir = (id, vide, suggestion) => {
+        const s = $(id);
+        s.innerHTML = "";
+        if (vide) s.appendChild(new Option(vide, ""));
+        d.ports.forEach(p => {
+          const o = new Option(p.port + " — " + (p.description || p.devine),
+                               p.port);
+          s.appendChild(o);
+        });
+        if (suggestion) s.value = suggestion;
+      };
+      remplir("port-fluidnc", null, d.suggestion_fluidnc);
+      remplir("port-pedale", "aucune", d.suggestion_pedale);
+    } catch (e) { /* le serveur répondra plus tard */ }
+  }
+
+  $("b-connecter").addEventListener("click", async () => {
+    const b = $("b-connecter");
+    b.disabled = true; b.textContent = "Connexion…";
+    try {
+      const d = await (await fetch("/api/connecter", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fluidnc: $("port-fluidnc").value,
+                               pedale: $("port-pedale").value }),
+      })).json();
+      messages("messages-lancement", d.ok
+        ? (d.avertissement ? [["avert", d.avertissement]]
+                           : [["succes", "Connectée."]])
+        : [["erreur", d.erreur]]);
+    } catch (e) {
+      messages("messages-lancement", [["erreur", "Échec : " + e]]);
+    } finally {
+      b.disabled = false; b.textContent = "Connecter";
+      rafraichir();
+    }
+  });
+
+  $("b-deconnecter").addEventListener("click", async () => {
+    await fetch("/api/deconnecter", { method: "POST" });
+    rafraichir();
+  });
+
+  // ---------------------------------------------------------------- messages
+  function messages(cible, liste) {
+    const c = $(cible);
+    c.innerHTML = "";
+    liste.forEach(([type, texte]) => {
+      const d = document.createElement("div");
+      d.className = type;
+      d.textContent = texte;
+      c.appendChild(d);
+    });
+  }
+
+  // ---------------------------------------------------------------- image
+  const depot = $("depot"), champFichier = $("fichier");
+
+  depot.addEventListener("click", () => champFichier.click());
+  ["dragenter", "dragover"].forEach(ev =>
+    depot.addEventListener(ev, e => { e.preventDefault(); depot.classList.add("survol"); }));
+  ["dragleave", "drop"].forEach(ev =>
+    depot.addEventListener(ev, e => { e.preventDefault(); depot.classList.remove("survol"); }));
+  depot.addEventListener("drop", e => {
+    if (e.dataTransfer.files.length) prendre(e.dataTransfer.files[0]);
+  });
+  champFichier.addEventListener("change", e => {
+    if (e.target.files.length) prendre(e.target.files[0]);
+  });
+
+  function prendre(f) {
+    const broderie = /\.(dst|pes|exp|jef|vp3|pec|xxx|hus|sew|u01|csd|pcs)$/i.test(f.name);
+    if (!f.type.startsWith("image/") && !broderie) {
+      messages("messages", [["erreur",
+        "Format non reconnu. Images : PNG, JPG. Broderie : DST, PES, EXP, JEF…"]]);
+      return;
+    }
+    imageChoisie = f;
+    if (broderie) {
+      depot.innerHTML = '<div class="gros">' + f.name + '</div>'
+        + '<div class="petit">Motif déjà numérisé — clique pour changer</div>';
+    } else {
+      const lecteur = new FileReader();
+      lecteur.onload = e => {
+        depot.innerHTML = "";
+        const img = document.createElement("img");
+        img.src = e.target.result;
+        depot.appendChild(img);
+        const nom = document.createElement("div");
+        nom.className = "petit";
+        nom.textContent = f.name + " — clique pour changer";
+        depot.appendChild(nom);
+      };
+      lecteur.readAsDataURL(f);
+    }
+    $("b-convertir").disabled = false;
+    messages("messages", []);
+  }
+
+  // ---------------------------------------------------------------- curseurs
+  [["largeur","v-largeur"],["hauteur","v-hauteur"],["point","v-point"],
+   ["espacement","v-espacement"],["angle","v-angle"],["liaison","v-liaison"],["traversee","v-traversee"],["cadence","v-cadence"],
+   ["largeur_trait","v-largeur_trait"],["densite_bourdon","v-densite_bourdon"],
+   ["compensation","v-compensation"],["largeur_min","v-largeur_min"],
+   ["seuil_simple","v-seuil_simple"],["bourdon_min","v-bourdon_min"]
+  ].forEach(([id, cible]) => {
+    const e = $(id);
+    e.addEventListener("input", () => { $(cible).textContent = e.value; });
+  });
+
+  function majSeuil() {
+    $("v-seuil").textContent = $("seuil-auto").checked ? "automatique" : $("seuil").value;
+    $("seuil").disabled = $("seuil-auto").checked;
+  }
+  $("seuil").addEventListener("input", majSeuil);
+  $("seuil-auto").addEventListener("change", majSeuil);
+  majSeuil();
+
+  // ---------------------------------------------------------------- conversion
+  $("b-convertir").addEventListener("click", async () => {
+    if (!imageChoisie) return;
+
+    const b = $("b-convertir");
+    b.disabled = true;
+    b.textContent = "Conversion en cours…";
+    messages("messages", []);
+
+    const form = new FormData();
+    form.append("image", imageChoisie);
+    form.append("largeur", $("largeur").value);
+    form.append("hauteur", $("hauteur").value);
+    form.append("mode", $("mode").value);
+    form.append("point", $("point").value);
+    form.append("espacement", $("espacement").value);
+    form.append("angle", $("angle").value);
+    form.append("liaison", $("liaison").value);
+    form.append("traversee", $("traversee").value);
+    form.append("largeur_trait", $("largeur_trait").value);
+    form.append("densite_bourdon", $("densite_bourdon").value);
+    form.append("compensation", $("compensation").value);
+    form.append("largeur_min", $("largeur_min").value);
+    form.append("seuil_simple", $("seuil_simple").value);
+    form.append("bourdon_min", $("bourdon_min").value);
+    form.append("auto", $("auto").checked ? "1" : "0");
+    form.append("bourdon", $("bourdon").checked ? "1" : "0");
+    form.append("souscouche", $("souscouche").checked ? "1" : "0");
+    form.append("epaissir", $("epaissir").checked ? "1" : "0");
+    form.append("cadence", $("cadence").value);
+    form.append("inverser", $("inverser").checked ? "1" : "0");
+    form.append("triple", $("triple").checked ? "1" : "0");
+    if (!$("seuil-auto").checked) form.append("seuil", $("seuil").value);
+
+    try {
+      const r = await fetch("/api/broderie/convertir", { method:"POST", body:form });
+      const d = await r.json();
+
+      if (!d.ok) {
+        messages("messages", [["erreur", d.erreur]]
+          .concat((d.avertissements || []).map(a => ["avert", a])));
+        motifPret = false;
+        $("b-lancer").disabled = true;
+        $("b-telecharger").disabled = true;
+        return;
+      }
+
+      $("apercu").innerHTML = d.apercu;
+      $("legende").style.display = "flex";
+      $("lg-chauds").style.display = d.points_chauds ? "inline" : "none";
+      $("stats").style.display = "grid";
+      $("s-points").textContent = d.stats.points;
+      $("s-minutes").textContent = d.stats.minutes;
+
+      const p = $("s-pauses");
+      p.textContent = d.stats.pauses;
+      p.style.color = d.stats.pauses > 6 ? "var(--alerte)" : "";
+      $("s-traversees").textContent = d.stats.traversees;
+      $("s-fil").textContent = d.stats.fil_m;
+
+      const msgs = (d.avertissements || []).map(a => ["avert", a]);
+      if (d.reglages_retenus) {
+        const g = d.reglages_retenus;
+        $("largeur_trait").value = g.largeur_trait; $("v-largeur_trait").textContent = g.largeur_trait;
+        $("seuil_simple").value = g.seuil_simple;   $("v-seuil_simple").textContent = g.seuil_simple;
+        $("point").value = g.point;                 $("v-point").textContent = g.point;
+        $("espacement").value = g.espacement;       $("v-espacement").textContent = g.espacement;
+        $("densite_bourdon").value = g.densite_bourdon; $("v-densite_bourdon").textContent = g.densite_bourdon;
+        $("traversee").value = g.traversee;         $("v-traversee").textContent = g.traversee;
+        $("epaissir").checked = !!g.epaissir;
+        (d.auto || []).forEach(n => msgs.unshift(["succes", n]));
+      }
+      messages("messages", msgs);
+      motifPret = true;
+      $("b-lancer").disabled = false;
+      $("b-telecharger").disabled = false;
+    } catch (e) {
+      messages("messages", [["erreur", "Le serveur n'a pas répondu : " + e]]);
+    } finally {
+      b.disabled = false;
+      b.textContent = "Convertir et prévisualiser";
+    }
+  });
+
+  // ---------------------------------------------------------------- lancement
+  $("b-lancer").addEventListener("click", async () => {
+    if (!motifPret) return;
+    if (!connectee) {
+      messages("messages-lancement", [["erreur", "Machine non connectée."]]);
+      return;
+    }
+    if (!confirm("La machine va se placer puis broder.\n\n"
+               + "Barre de pied abaissée ? Griffes escamotées ? Tissu tendu ?")) return;
+
+    const b = $("b-lancer");
+    b.disabled = true;
+    b.textContent = "Mise en place…";
+    messages("messages-lancement", []);
+
+    try {
+      // Plus de téléversement : le G-code part ligne par ligne depuis le PC.
+      const l = await (await fetch("/api/broderie/lancer",
+                                   { method:"POST" })).json();
+      messages("messages-lancement", l.ok
+        ? [["succes", "Broderie lancée. " + l.faites.join(" · ")]]
+        : [["erreur", l.erreur]]);
+    } catch (e) {
+      messages("messages-lancement", [["erreur", "Échec : " + e]]);
+    } finally {
+      b.disabled = false;
+      b.textContent = "Broder — machine homée";
+      rafraichir();
+    }
+  });
+
+  $("b-homing").addEventListener("click", async () => {
+    messages("messages-lancement", [["avert", "Homing en cours…"]]);
+    const d = await (await fetch("/api/homing", { method:"POST" })).json();
+    messages("messages-lancement", d.ok
+      ? [["succes", "Homing terminé."]] : [["erreur", d.erreur]]);
+  });
+
+  $("b-telecharger").addEventListener("click", () => {
+    window.location = "/api/broderie/fichier";
+  });
+  $("b-pause").addEventListener("click", async () => {
+    await fetch("/api/broderie/pause", { method:"POST" });
+  });
+  $("b-reprendre").addEventListener("click", async () => {
+    await fetch("/api/broderie/reprendre", { method:"POST" });
+  });
+  $("b-arret").addEventListener("click", async () => {
+    if (!confirm("Annuler la broderie ? La position sera perdue.")) return;
+    await fetch("/api/broderie/annuler", { method:"POST" });
+    messages("messages-lancement", [["avert",
+      "Broderie annulée. Refais un homing avant de relancer."]]);
+  });
+
+  chargerPorts();
+  rafraichir();
+  setInterval(rafraichir, 1000);
+})();
+</script>
+</body>
+</html>
