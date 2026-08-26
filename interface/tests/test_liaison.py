@@ -340,6 +340,55 @@ def main() -> int:
                          "F%.0f apres relachement, contre F%.0f avant"
                          % (v_apres, v_avant))
 
+    # ---- pedale : le decoupage en tranches ------------------------------
+    # Le bug precis qui a motive ce decoupage : a pedale douce, une commande
+    # portait sur un point ENTIER (360 deg), qui pouvait prendre plusieurs
+    # secondes a s'executer. Rappuyer plus fort pendant ce temps ne changeait
+    # rien avant la fin du tour. Ici on verifie les deux versants : les
+    # tranches sont courtes en degres a vitesse faible, ET une acceleration
+    # en cours de route est prise en compte en une fraction de seconde, sans
+    # attendre un tour complet.
+    print("\nPedale : le decoupage en tranches evite d'attendre un tour")
+
+    def distance(ligne: str) -> float:
+        return float(ligne.upper().split("Z")[1].split("F")[0])
+
+    uno.envoyer("P0")
+    time.sleep(0.3)
+    faux2.lignes.clear()
+
+    # Pedale a peine enfoncee : cadence minimale (20 pts/min), tres lente --
+    # un point entier y durerait 3 secondes.
+    uno.envoyer("P4")
+    time.sleep(0.4)
+    lentes = [l for l in faux2.lignes if l.upper().startswith("$J=")]
+    tout_bon &= verifier("a pedale douce, les tranches restent courtes",
+                         bool(lentes) and
+                         all(distance(l) < 30.0 for l in lentes),
+                         "%d tranches, %.1f deg en moyenne (jamais 360)"
+                         % (len(lentes),
+                            sum(distance(l) for l in lentes) / len(lentes)
+                            if lentes else 0))
+
+    # Plein gaz SANS relacher : le changement doit mordre en une fraction de
+    # seconde, pas attendre la fin d'un point a l'ancienne vitesse.
+    rang = len(faux2.lignes)
+    v_lente = vitesse(lentes[0])
+    t0 = time.time()
+    uno.envoyer("P100")
+    delai = None
+    while time.time() - t0 < 1.0:
+        nouvelles = [l for l in faux2.lignes[rang:] if l.upper().startswith("$J=")]
+        if any(vitesse(l) > v_lente * 5 for l in nouvelles):
+            delai = time.time() - t0
+            break
+        time.sleep(0.005)
+    tout_bon &= verifier(
+        "une acceleration en cours de route mord en moins de 0.2 s",
+        delai is not None and delai < 0.2,
+        "%.3f s (un point entier a l'ancienne vitesse aurait pris ~3 s)"
+        % (delai if delai is not None else -1))
+
     couture.arreter()
     fluid2.fermer()
     faux2.arreter()

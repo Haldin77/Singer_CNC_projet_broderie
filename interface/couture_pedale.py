@@ -7,31 +7,35 @@ La pédale d'origine, rendue progressive : plus on appuie, plus la machine
 coud vite. C'est le geste qu'on cherchait depuis le début.
 
 COMMENT LA VITESSE EST PILOTEE
-    L'arbre avance point par point, en G1 relatif. Chaque point part avec la
-    vitesse lue sur la pedale a cet instant.
+    L'arbre avance par TRANCHES COURTES, en jog relatif (« $J=G91 Z... »).
+    Chaque tranche dure toujours a peu pres DUREE_TRANCHE_S, quelle que soit
+    la vitesse -- sa longueur en degres varie, son temps d'execution non.
 
-    Le point delicat est le RYTHME D'ENVOI. FluidNC repond « ok » des qu'il a
-    PLANIFIE un mouvement, pas quand il l'a execute. Se caler sur les accuses
-    remplissait donc son planificateur de seize mouvements d'avance : la
-    machine continuait plusieurs secondes apres le relachement de la pedale.
-    Et chaque envoi decelerait a zero faute de suivant pret a temps, ce qui
-    la faisait coudre au ralenti.
+    C'est ce decouplage qui evite le piege dans lequel on est tombe une
+    premiere fois : envoyer un point ENTIER (360 deg) par commande. A pedale
+    douce, un seul point pouvait prendre plusieurs secondes a s'executer, et
+    rien de ce qui etait deja accepte par la carte ne pouvait changer de
+    vitesse avant la fin de CETTE commande -- rappuyer plus fort ne mordait
+    qu'apres le tour complet. En tranches de duree fixe, la commande en vol
+    se termine toujours vite, et la tranche suivante -- envoyee aussitot --
+    porte deja la vitesse a jour.
 
-    On se cale donc sur le TEMPS. Un point a la cadence C dure 60/C secondes ;
-    le suivant part quand 80 % de cette duree se sont ecoules. Le
-    planificateur reste alimente -- les mouvements s'enchainent sans
-    decelerer -- tout en ne contenant jamais plus d'un point d'avance.
+    Le rythme d'envoi se cale sur le TEMPS, pas sur les accuses. FluidNC
+    repond « ok » des qu'il a PLANIFIE un mouvement, pas quand il l'a
+    execute : s'y fier remplirait le planificateur de plusieurs secondes
+    d'avance. On mesure a la place l'ECART entre ce qui a ete envoye et ce
+    qui a ete reellement execute (lu sur MPos), et on ne renvoie que si cet
+    ecart reste sous un seuil d'environ AVANCE_S secondes.
 
-    Consequence : relacher la pedale arrete la machine en moins d'un point,
-    c'est-a-dire des que l'aiguille est ressortie du tissu. C'est exactement
-    le comportement d'une machine a coudre.
+    L'ARRET : au relachement, un jog cancel (0x85) freine a l'acceleration
+    maximale ET vide le planificateur -- rien de rejoue a l'ancienne vitesse
+    au reappui, contrairement au feed hold classique qui suspend sans rien
+    jeter. Voir la note plus bas sur ANNULER_JOG.
 
     Et si quoi que ce soit s'interrompt -- cable debranche, Arduino plante,
     serveur ferme --, plus rien n'est envoye et la machine s'arrete d'
     elle-meme. Elle n'attend AUCUN ordre d'arret qui pourrait ne jamais
     arriver : c'est un homme-mort par construction.
-
-    Pourquoi G1 et pas un jog : un jog ne se module pas en cours de route.
 """
 
 from __future__ import annotations
@@ -44,10 +48,26 @@ from liaison import Fluid, Pedale
 
 DEG_PAR_POINT = 360.0
 
-# On envoie UN point a la fois. C'est aussi la distance d'arret : au
-# relachement, la machine termine le point en cours et s'arrete, aiguille
-# ressortie. Envoyer davantage rallongerait l'arret sans rien apporter.
-POINTS_SALVE = 1
+# --- LE DECOUPAGE EN TRANCHES : s = v * dt -----------------------------
+# Chaque commande envoyee a la carte porte sur une petite tranche de temps,
+# pas sur une distance fixe. Sa longueur en degres se deduit de la vitesse
+# du moment : DUREE_TRANCHE_S secondes de couture, quelle que soit la
+# cadence.
+#
+# Avant ce decoupage, chaque commande portait sur un point ENTIER (360 deg)
+# quelle que soit la vitesse. A pedale douce, ce point unique pouvait
+# prendre plusieurs secondes a s'executer -- bien plus que la fenetre
+# d'avance visee (AVANCE_S) -- et rien de deja accepte par la carte ne
+# pouvait changer de vitesse avant la fin de CETTE commande. Rappuyer plus
+# fort en cours de route ne changeait donc rien tant que le tour n'etait pas
+# termine.
+#
+# C'est la meme methode que documente le wiki de Grbl pour le pilotage d'un
+# joystick ou d'une pedale analogique : des tranches courtes et regulieres
+# dans le temps, renvoyees en continu, chacune portant la vitesse la plus
+# recente. 50 ms est dans la fourchette qu'il recommande pour un ressenti
+# quasi instantane (25 a 60 ms).
+DUREE_TRANCHE_S = 0.05
 
 # --- L'ARRET : des JOGS, et l'annulation de jog -----------------------------
 # Les points partent en « $J= » (jog) et non en « G1 ». C'est ce qui change
@@ -91,8 +111,10 @@ POINTS_SALVE = 1
 # borne par AVANCE_S.
 AVANCE_S = 0.6
 
-# Bornes de cette avance, en degres. Le plancher garantit qu'un point peut
-# toujours partir ; le plafond autorise les 600 points/min du firmware.
+# Bornes de cette avance, en degres. Le plancher garde un peu de marge dans
+# le planificateur meme a pedale tres douce, pour absorber les a-coups du
+# thread Python sans a-coup sur l'arbre. Le plafond autorise les 600
+# points/min du firmware.
 AVANCE_MIN_DEG = 90.0
 AVANCE_MAX_DEG = 3600.0
 
@@ -204,7 +226,6 @@ class CoutureAPedale:
         return float(m.group(1)) if m else None
 
     def _pilotage(self) -> None:
-        distance = POINTS_SALVE * DEG_PAR_POINT
         erreurs_au_depart = self.fluid.compteur_erreur
 
         # Position de depart : la reference de tout le pilotage.
@@ -213,6 +234,11 @@ class CoutureAPedale:
         if z_base is None:
             self.erreur = "Position machine illisible."
             return
+
+        # Reference SEPAREE pour le compteur de points, qui ne doit pas
+        # sauter a chaque annulation -- seul z_base est reinitialise au
+        # reappui, pour que le calcul d'avance reparte juste.
+        z_session = z_base
 
         envoye_deg = 0.0          # tout ce qui a ete commande depuis le debut
         dernier_sondage = 0.0
@@ -238,6 +264,12 @@ class CoutureAPedale:
                 z = self._lire_z()
                 execute_deg = (z - z_base) if z is not None else 0.0
                 retard_deg = envoye_deg - execute_deg
+
+                # Le compteur de points reflete ce qui a REELLEMENT tourne,
+                # pas ce qui a ete envoye -- une tranche annulee en vol
+                # (relachement en cours d'execution) ne doit pas compter.
+                if z is not None:
+                    self.points = int((z - z_session) / DEG_PAR_POINT)
 
                 cadence = cadence_depuis_pedale(self.pedale.valeur)
                 self.cadence = cadence
@@ -274,17 +306,22 @@ class CoutureAPedale:
                     time.sleep(0.005)
                     continue
 
+                # La tranche : s = v * dt. Distance courte, TOUJOURS courte,
+                # quelle que soit la cadence -- c'est ce qui garantit qu'une
+                # commande deja en vol se termine vite, et que la suivante,
+                # partie dans la foulee, porte deja la vitesse a jour.
+                distance = vitesse_deg_s * DUREE_TRANCHE_S
+
                 vitesse = cadence * DEG_PAR_POINT
                 # $J= et non G1 : seuls les jogs peuvent etre VIDES du
                 # planificateur par 0x85. Un jog n'accepte pas de mode modal
                 # separe, d'ou G91 dans la ligne elle-meme.
-                if not self.fluid.ligne("$J=G91 Z%.0f F%.0f"
+                if not self.fluid.ligne("$J=G91 Z%.3f F%.0f"
                                         % (distance, vitesse)):
                     self.erreur = (self.fluid.derniere_erreur
                                    or "Ecriture impossible sur le port serie.")
                     return
                 envoye_deg += distance
-                self.points += POINTS_SALVE
         finally:
             # A la sortie, la machine ne doit rien avoir en file. L'annulation
             # est sans effet si le planificateur est deja vide.
