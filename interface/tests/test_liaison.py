@@ -27,6 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from couture_pedale import CoutureAPedale                     # noqa: E402
 from envoi import Envoyeur                                    # noqa: E402
 from liaison import TAMPON_FLUIDNC, Fluid, Pedale             # noqa: E402
 
@@ -54,6 +55,7 @@ class FauxFluidNC:
         self.lignes: list = []
         self.temps_reel: list = []
         self.occupation_max = 0
+        self.jogs_jetes = 0
 
         self._file: deque = deque()      # lignes recues, pas encore executees
         self._verrou = threading.Lock()
@@ -88,6 +90,18 @@ class FauxFluidNC:
                     self._reprise.set()
                 elif c == b"\x18":
                     self.temps_reel.append("reset")
+                    self._reprise.set()
+                elif c == b"\x85":
+                    # Jog Cancel : le vrai firmware freine ET VIDE le
+                    # planificateur. On imite le point essentiel -- la file
+                    # des jogs non executes est jetee.
+                    self.temps_reel.append("annuler-jog")
+                    with self._verrou:
+                        jetes = [l for l in self._file
+                                 if l.upper().startswith("$J=")]
+                        for l in jetes:
+                            self._file.remove(l)
+                        self.jogs_jetes += len(jetes)
                     self._reprise.set()
                 else:
                     reste.append(octet)
@@ -276,6 +290,59 @@ def main() -> int:
     tout_bon &= verifier("une pedale muette rend 0", pedale.valeur == 0,
                          "presente=%s" % pedale.presente)
 
+    # ---- pedale : la vitesse ne doit pas survivre a un relachement -------
+    # C'est le defaut qui a motive le passage aux jogs : avec des G1, le
+    # feed hold suspendait sans rien jeter, et le « ~ » de reprise rejouait
+    # les mouvements en file A LEUR ANCIENNE VITESSE.
+    print("\nPedale : annulation de jog au relachement")
+    faux2 = FauxFluidNC()
+    fluid2 = Fluid(faux2.port)
+    fluid2.ouvrir()
+
+    couture = CoutureAPedale(fluid2, pedale)
+    tout_bon &= verifier("la boucle demarre", not couture.demarrer())
+
+    # Plein gaz : la file se remplit de jogs rapides.
+    fin = time.time() + 1.5
+    while time.time() < fin:
+        uno.envoyer("P100")
+        time.sleep(0.05)
+    rapides = [l for l in faux2.lignes if l.upper().startswith("$J=")]
+    tout_bon &= verifier("les points partent en jog, pas en G1",
+                         bool(rapides) and not any(
+                             l.startswith("G91 G1") for l in faux2.lignes),
+                         "%d jogs envoyes" % len(rapides))
+
+    # Relachement : la file doit etre VIDEE, pas gelee.
+    uno.envoyer("P0")
+    time.sleep(0.6)
+    tout_bon &= verifier("le relachement envoie l'annulation de jog (0x85)",
+                         "annuler-jog" in faux2.temps_reel)
+    tout_bon &= verifier("aucun « ~ » n'est envoye : plus rien a reprendre",
+                         "~" not in faux2.temps_reel)
+
+    # Reappui en douceur : les jogs qui suivent doivent porter la NOUVELLE
+    # vitesse, pas celle d'avant l'arret.
+    rang = len(faux2.lignes)
+    fin = time.time() + 1.0
+    while time.time() < fin:
+        uno.envoyer("P20")
+        time.sleep(0.05)
+    apres = [l for l in faux2.lignes[rang:] if l.upper().startswith("$J=")]
+
+    def vitesse(ligne: str) -> float:
+        return float(ligne.upper().split("F")[1])
+
+    v_avant = max(vitesse(l) for l in rapides)
+    v_apres = max(vitesse(l) for l in apres) if apres else 0.0
+    tout_bon &= verifier("la reprise se fait a la NOUVELLE vitesse",
+                         bool(apres) and v_apres < v_avant / 2,
+                         "F%.0f apres relachement, contre F%.0f avant"
+                         % (v_apres, v_avant))
+
+    couture.arreter()
+    fluid2.fermer()
+    faux2.arreter()
     pedale.fermer()
 
     print("\n%s" % ("Tout est bon." if tout_bon else "AU MOINS UN ECHEC."))

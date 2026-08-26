@@ -49,18 +49,32 @@ DEG_PAR_POINT = 360.0
 # ressortie. Envoyer davantage rallongerait l'arret sans rien apporter.
 POINTS_SALVE = 1
 
-# --- L'ARRET : le feed hold, pas la fin de la file --------------------------
-# Relacher la pedale envoie « ! » (feed hold) : FluidNC freine IMMEDIATEMENT,
-# meme au milieu d'un point, a l'acceleration maximale. Rappuyer envoie « ~ »
-# et la couture reprend exactement ou elle en etait.
+# --- L'ARRET : des JOGS, et l'annulation de jog -----------------------------
+# Les points partent en « $J= » (jog) et non en « G1 ». C'est ce qui change
+# tout au relachement.
 #
-# C'est le comportement d'une vraie machine a coudre -- le volant s'arrete la
-# ou il est -- et c'est le seul arret dont la latence ne depend NI de la
-# cadence NI du contenu de la file. Toute strategie « on cesse d'envoyer et
-# on laisse finir » impose d'attendre la fin du travail en file : a pedale
-# douce, un seul point dure plus d'une seconde.
+# Avec des G1, relacher envoyait un feed hold « ! » : FluidNC SUSPEND, il ne
+# jette rien. Les mouvements deja en file gardent leur « F », et le « ~ » de
+# reprise les rejouait A LEUR ANCIENNE VITESSE. Rappuyer doucement apres un
+# arret sec relancait donc la machine a la cadence precedente, le temps que
+# la file se vide -- jusqu'a six points a haute cadence.
 #
-# Consequence assumee : l'aiguille peut s'arreter plantee dans le tissu.
+# Sur des jogs, la doc FluidNC est explicite : « a feed hold will cancel the
+# jog motion and flush all remaining jog motions in the planner buffer ». Il
+# existe meme un caractere dedie, 0x85 (Jog Cancel), qui annule le jog en
+# cours ET vide ceux qui restent.
+#
+# On y gagne trois choses :
+#   - plus aucune vitesse fantome a la reprise, la file est vide
+#   - un arret aussi net qu'avec le feed hold : c'est le meme freinage
+#   - aucun reset logiciel, donc aucune alarme et aucun homing a refaire
+#     (contrairement a 0x18, seule autre facon de vider le planificateur)
+#
+# Ce qu'on abandonne : la reprise « exactement ou on s'etait arrete ». Elle
+# n'a plus de sens ici -- on ne reprend pas un programme, on redemande des
+# points. Le compteur de position est relu apres chaque annulation.
+#
+# Consequence inchangee : l'aiguille peut s'arreter plantee dans le tissu.
 # Le bouton « Aiguille haute » la degage, comme sur les machines du commerce.
 
 # Avance de travail visee dans la machine, en secondes de couture.
@@ -68,17 +82,13 @@ POINTS_SALVE = 1
 # CE REGLAGE FIXE LA VITESSE MAXIMALE ATTEIGNABLE, et c'est contre-intuitif.
 # FluidNC doit toujours pouvoir s'arreter dans la distance qu'il a devant
 # lui : il ne depassera jamais la vitesse dont la distance de freinage tient
-# dans la file. A 2000 deg/s2, tenir 600 points/min (3600 deg/s) reclame
-# 3240 deg d'avance, soit neuf points.
+# dans la file. A 2000 deg/s2, la cadence plafonne ainsi vers 400 points/min
+# quelle que soit la valeur demandee.
 #
-# Une file courte bridait donc la couture a environ 280 points/min, la
-# machine freinant en permanence. C'etait le prix a payer tant que l'arret
-# consistait a vider la file ; depuis que le relachement declenche un feed
-# hold, la longueur de la file n'influe plus du tout sur le temps d'arret.
-#
-# Ce qu'elle coute encore : un changement de cadence en cours de couture met
-# jusqu'a AVANCE_S a se faire sentir, le temps que la file deja envoyee
-# s'ecoule. Six dixiemes de seconde restent imperceptibles a la pedale.
+# Depuis le passage aux jogs, ce reglage ne coute PLUS de latence a l'arret
+# -- l'annulation vide la file au lieu de la rejouer. Il ne reste que le
+# delai de prise en compte d'un CHANGEMENT de cadence en cours de couture,
+# borne par AVANCE_S.
 AVANCE_S = 0.6
 
 # Bornes de cette avance, en degres. Le plancher garantit qu'un point peut
@@ -86,7 +96,7 @@ AVANCE_S = 0.6
 AVANCE_MIN_DEG = 90.0
 AVANCE_MAX_DEG = 3600.0
 
-# En dessous de ce reliquat, pas de feed hold au relachement : la machine
+# En dessous de ce reliquat, inutile d'annuler au relachement : la machine
 # est deja pratiquement arretee.
 RELIQUAT_HOLD_DEG = 45.0
 
@@ -94,8 +104,8 @@ RELIQUAT_HOLD_DEG = 45.0
 # il ne passe pas par le tampon de lignes et ne derange pas l'execution.
 PERIODE_SONDAGE_S = 0.06
 
-FEED_HOLD = b"!"
-CYCLE_START = b"~"
+# 0x85 -- Jog Cancel. Caractere temps reel : traite immediatement, hors file.
+ANNULER_JOG = b"\x85"
 
 RE_MPOS_Z = re.compile(r"MPos:[-\d.]+,[-\d.]+,([-\d.]+)")
 
@@ -206,7 +216,7 @@ class CoutureAPedale:
 
         envoye_deg = 0.0          # tout ce qui a ete commande depuis le debut
         dernier_sondage = 0.0
-        en_pause = False
+        annule = False            # la file a ete videe, on attend un reappui
 
         try:
             while not self._stop.is_set():
@@ -233,19 +243,29 @@ class CoutureAPedale:
                 self.cadence = cadence
 
                 if cadence <= 0:
-                    # Relachement : FREIN, tout de suite. On n'attend pas la
-                    # fin de la file -- a pedale douce elle durerait des
-                    # secondes.
-                    if not en_pause and retard_deg > RELIQUAT_HOLD_DEG:
-                        self.fluid.temps_reel(FEED_HOLD)
-                        en_pause = True
+                    # Relachement : on ANNULE, on ne suspend pas. 0x85 freine
+                    # a l'acceleration maximale -- meme arret qu'un feed hold
+                    # -- et vide le planificateur dans la foulee. Rien ne sera
+                    # rejoue a l'ancienne vitesse au prochain appui.
+                    if not annule and retard_deg > RELIQUAT_HOLD_DEG:
+                        self.fluid.temps_reel(ANNULER_JOG)
+                        annule = True
                     time.sleep(0.01)
                     continue
 
-                if en_pause:
-                    # On rappuie : la couture reprend ou elle s'etait figee.
-                    self.fluid.temps_reel(CYCLE_START)
-                    en_pause = False
+                if annule:
+                    # On rappuie apres une annulation. Ce qui restait en file
+                    # a ete jete : la machine s'est arretee AVANT la position
+                    # commandee, et « envoye_deg » ne veut plus rien dire. On
+                    # reprend la position reelle comme nouvelle reference,
+                    # sinon le retard calcule resterait fantome et bloquerait
+                    # tout envoi.
+                    self.fluid.demander_etat()
+                    if (z := self._lire_z()) is None:
+                        time.sleep(0.01)
+                        continue
+                    z_base, envoye_deg = z, 0.0
+                    annule = False
 
                 vitesse_deg_s = cadence * DEG_PAR_POINT / 60.0
                 seuil = min(AVANCE_MAX_DEG,
@@ -255,7 +275,10 @@ class CoutureAPedale:
                     continue
 
                 vitesse = cadence * DEG_PAR_POINT
-                if not self.fluid.ligne("G91 G1 Z%.0f F%.0f"
+                # $J= et non G1 : seuls les jogs peuvent etre VIDES du
+                # planificateur par 0x85. Un jog n'accepte pas de mode modal
+                # separe, d'ou G91 dans la ligne elle-meme.
+                if not self.fluid.ligne("$J=G91 Z%.0f F%.0f"
                                         % (distance, vitesse)):
                     self.erreur = (self.fluid.derniere_erreur
                                    or "Ecriture impossible sur le port serie.")
@@ -263,10 +286,9 @@ class CoutureAPedale:
                 envoye_deg += distance
                 self.points += POINTS_SALVE
         finally:
-            # Ne JAMAIS laisser la machine figee en Hold avec du travail en
-            # file : le reliquat (borne par le seuil) s'execute, puis Idle.
-            if en_pause:
-                self.fluid.temps_reel(CYCLE_START)
+            # A la sortie, la machine ne doit rien avoir en file. L'annulation
+            # est sans effet si le planificateur est deja vide.
+            self.fluid.temps_reel(ANNULER_JOG)
 
     # -- gestes de couture -------------------------------------------------
 
@@ -285,8 +307,12 @@ class CoutureAPedale:
     def aiguille_en_haut(self, cadence: float = 30.0) -> str:
         """Termine le tour en cours pour degager l'aiguille du tissu.
 
-        C'est le complement du feed hold : la pedale peut laisser l'aiguille
-        plantee, ce bouton la remonte au point mort haut.
+        C'est le complement de l'annulation de jog : relacher la pedale
+        arrete l'arbre ou il se trouve, aiguille eventuellement plantee.
+        Ce bouton termine le tour pour la remonter au point mort haut.
+
+        Un G1 et non un jog, ici : le mouvement est voulu et doit aller a son
+        terme, pas etre annulable.
         """
         if self.active:
             return "Coupe d'abord la pedale : ce bouton s'utilise a l'arret."
