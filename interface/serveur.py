@@ -89,6 +89,10 @@ class Machine:
         self.envoyeur: Envoyeur | None = None
         self.couture: CoutureAPedale | None = None
         self.erreur = ""
+        # Dernier port demande pour la pedale. Retenu pour pouvoir la
+        # rebrancher seule, sans rouvrir le port de la carte -- ce qui
+        # provoquerait un reset de l'ESP32 et une alarme.
+        self.port_pedale = ""
 
     @property
     def connectee(self) -> bool:
@@ -106,15 +110,43 @@ class Machine:
         self.envoyeur = Envoyeur(self.fluid)
 
         if port_pedale:
-            try:
-                self.pedale = Pedale(port_pedale)
-                self.pedale.ouvrir()
-                self.couture = CoutureAPedale(self.fluid, self.pedale)
-            except Exception as e:                   # noqa: BLE001
-                # La pedale est un confort : son absence ne doit pas empecher
-                # de broder.
-                self.pedale = None
-                return "Carte connectee, mais pedale injoignable : %s" % e
+            self.port_pedale = port_pedale
+            if (erreur := self.connecter_pedale()):
+                return "Carte connectee, mais " + erreur
+        return ""
+
+    def connecter_pedale(self, port: str | None = None) -> str:
+        """Ouvre la pedale seule. Rend un message d'erreur, ou une chaine vide.
+
+        Separe de connecter() a dessein : rebrancher la pedale ne doit pas
+        toucher au port de la carte. Rouvrir ce dernier reinitialise l'ESP32,
+        ce qui remet la machine en alarme et impose un nouveau homing --
+        inacceptable pour recuperer un simple cable debranche.
+        """
+        if not self.fluid:
+            return "carte non connectee."
+
+        port = port or self.port_pedale
+        if not port:
+            return "aucun port connu pour la pedale."
+
+        if self.couture:
+            self.couture.arreter()
+        if self.pedale:
+            self.pedale.fermer()
+        self.pedale = self.couture = None
+
+        try:
+            pedale = Pedale(port)
+            pedale.ouvrir()
+        except Exception as e:                       # noqa: BLE001
+            # La pedale est un confort : son absence ne doit jamais empecher
+            # de broder.
+            return "pedale injoignable sur %s : %s" % (port, e)
+
+        self.port_pedale = port
+        self.pedale = pedale
+        self.couture = CoutureAPedale(self.fluid, pedale)
         return ""
 
     def deconnecter(self) -> None:
@@ -208,10 +240,111 @@ def api_connecter() -> object:
                     "pedale": bool(machine.pedale)})
 
 
+@app.post("/api/pedale/connecter")
+def api_pedale_connecter() -> object:
+    """Rebranche la pedale seule, sans reinitialiser la carte."""
+    if (r := exige_connexion()):
+        return r
+    port = (request.get_json(silent=True) or {}).get("port") or None
+    if not port and not machine.port_pedale:
+        # Rien de connu : on cherche qui parle le langage de la pedale.
+        roles = identifier_tous(duree_s=3.0)
+        port = next((p for p, r in roles.items() if r == "pedale"), None)
+        if not port:
+            return jsonify({
+                "ok": False,
+                "erreur": "Aucune pedale trouvee. Verifie le cable USB, et "
+                          "que le moniteur serie de l'IDE Arduino est "
+                          "ferme."}), 404
+    if (erreur := machine.connecter_pedale(port)):
+        return jsonify({"ok": False, "erreur": erreur.capitalize()}), 502
+    return jsonify({"ok": True, "port": machine.port_pedale})
+
+
 @app.post("/api/deconnecter")
 def api_deconnecter() -> object:
     machine.deconnecter()
     return jsonify({"ok": True})
+
+
+# ---- reglages de la carte ------------------------------------------------
+
+AXES = ("x", "y", "z")
+RE_VALEUR = re.compile(r"=\s*(-?[\d.]+)\s*$")
+
+
+def _chemin_acceleration(axe: str) -> str:
+    return "$/axes/%s/acceleration_mm_per_sec2" % axe
+
+
+@app.get("/api/reglages")
+def api_reglages() -> object:
+    """Lit les accelerations courantes des trois axes.
+
+    Z est en degres d'arbre par seconde carree, X et Y en mm/s2 : l'unite
+    suit celle de l'axe, et Z est rotatif sur cette machine.
+    """
+    if (r := exige_connexion()):
+        return r
+    if machine.envoyeur and machine.envoyeur.en_cours:
+        return jsonify({"ok": False,
+                        "erreur": "Broderie en cours."}), 409
+
+    valeurs = {}
+    for axe in AXES:
+        ok, lignes = machine.fluid.interroger(_chemin_acceleration(axe))
+        trouve = None
+        for ligne in lignes:
+            if (m := RE_VALEUR.search(ligne)):
+                trouve = float(m.group(1))
+        valeurs[axe] = trouve
+    return jsonify({"ok": True, "acceleration": valeurs})
+
+
+@app.post("/api/reglages")
+def api_reglages_ecrire() -> object:
+    """Ecrit une ou plusieurs accelerations.
+
+    ATTENTION : ces valeurs ne vivent qu'en memoire. Un redemarrage de la
+    carte les oublie. Pour les rendre permanentes, il faut les reporter dans
+    firmware/fluidnc-config.yaml ET televerser ce fichier sur la carte.
+    C'est voulu : on peut ainsi essayer une valeur trop ambitieuse sans
+    risquer de se retrouver avec une machine inutilisable au redemarrage.
+    """
+    if (r := exige_connexion()):
+        return r
+    if machine.envoyeur and machine.envoyeur.en_cours:
+        return jsonify({
+            "ok": False,
+            "erreur": "Une broderie est en cours. Change les accelerations "
+                      "a l'arret."}), 409
+    if machine.couture and machine.couture.active:
+        return jsonify({
+            "ok": False,
+            "erreur": "Coupe la pedale avant de changer les accelerations."}), 409
+
+    demande = (request.get_json(silent=True) or {}).get("acceleration") or {}
+    ecrits, refuses = {}, {}
+    for axe in AXES:
+        if axe not in demande or demande[axe] in (None, ""):
+            continue
+        try:
+            valeur = float(demande[axe])
+        except (TypeError, ValueError):
+            refuses[axe] = "valeur illisible"
+            continue
+        if not 1.0 <= valeur <= 100000.0:
+            refuses[axe] = "hors bornes (1 a 100000)"
+            continue
+        ok, lignes = machine.fluid.interroger(
+            "%s=%.3f" % (_chemin_acceleration(axe), valeur))
+        if ok:
+            ecrits[axe] = valeur
+        else:
+            refuses[axe] = " ".join(lignes) or "refuse par la carte"
+
+    return jsonify({"ok": not refuses, "ecrits": ecrits, "refuses": refuses,
+                    "volatile": True})
 
 
 # ---- etat ----------------------------------------------------------------

@@ -105,6 +105,11 @@
     <div class="jauge-texte" id="jauge-texte">pédale</div>
   </div>
   <div class="absente" id="pedale-absente" style="display:none"></div>
+  <!-- Rebrancher la pedale SEULE. Rouvrir le port de la carte la
+       reinitialiserait et remettrait la machine en alarme. -->
+  <div id="bloc-rebrancher" style="display:none;margin-top:10px">
+    <button id="b-rebrancher-pedale">Rebrancher la pédale</button>
+  </div>
 </div>
 
 <div class="carte">
@@ -128,6 +133,27 @@
   <div style="margin-top:10px">
     <button class="danger" id="b-arret">ARRÊT</button>
   </div>
+</div>
+
+<div class="carte">
+  <div class="soustitre" style="margin-bottom:10px">
+    Accélérations — X et Y en mm/s², Z en degrés d'arbre par s².
+  </div>
+  <div class="rangee trois">
+    <label>X<input type="number" id="acc-x" min="1" max="100000" step="100"></label>
+    <label>Y<input type="number" id="acc-y" min="1" max="100000" step="100"></label>
+    <label>Z<input type="number" id="acc-z" min="1" max="100000" step="100"></label>
+  </div>
+  <div class="rangee" style="margin-top:10px">
+    <button id="b-lire-acc">Relire</button>
+    <button id="b-ecrire-acc">Appliquer</button>
+  </div>
+  <p class="soustitre" style="margin:10px 0 0">
+    Ces valeurs ne vivent qu'en mémoire : un redémarrage de la carte les
+    oublie. C'est voulu — une valeur trop ambitieuse ne peut pas te laisser
+    une machine inutilisable. Pour les garder, reporte-les dans
+    <code>fluidnc-config.yaml</code> et téléverse-le.
+  </p>
 </div>
 
 <div class="carte"><div id="journal"></div></div>
@@ -190,6 +216,9 @@
       const souci = p.erreur || (p.presente ? "" : p.diagnostic);
       $("pedale-absente").style.display = souci ? "" : "none";
       $("pedale-absente").textContent = souci || "";
+      // Le bouton n'a de sens que carte connectée et pédale absente : c'est
+      // exactement le cas d'un câble USB rebranché après coup.
+      $("bloc-rebrancher").style.display = p.presente ? "none" : "";
 
       $("b-pedale").disabled = !p.presente || d.etat === "Alarm";
       pedaleActive = !!p.active;
@@ -275,8 +304,44 @@
     rafraichir();
   });
 
+  $("b-rebrancher-pedale").addEventListener("click", async () => {
+    log("Recherche de la pédale…");
+    const d = await poster("/api/pedale/connecter");
+    log(d.ok ? "Pédale rebranchée sur " + d.port : d.erreur,
+        d.ok ? "ok" : "err");
+    rafraichir();
+  });
+
+  // --- accélérations ---
+  const AXES = ["x", "y", "z"];
+
+  async function lireAcc() {
+    const d = await (await fetch("/api/reglages")).json();
+    if (!d.ok) { log(d.erreur || "Lecture impossible.", "err"); return; }
+    AXES.forEach((a) => {
+      const v = d.acceleration[a];
+      if (v !== null && v !== undefined) $("acc-" + a).value = v;
+    });
+  }
+
+  $("b-lire-acc").addEventListener("click", lireAcc);
+
+  $("b-ecrire-acc").addEventListener("click", async () => {
+    const acc = {};
+    AXES.forEach((a) => { const v = $("acc-" + a).value; if (v) acc[a] = v; });
+    const d = await poster("/api/reglages", { acceleration: acc });
+    if (d.erreur) { log(d.erreur, "err"); return; }
+    const ecrits = Object.entries(d.ecrits || {})
+      .map(([a, v]) => a.toUpperCase() + " = " + v);
+    if (ecrits.length) log("Appliqué : " + ecrits.join(", "), "ok");
+    Object.entries(d.refuses || {}).forEach(([a, m]) =>
+      log("Axe " + a.toUpperCase() + " refusé : " + m, "err"));
+    lireAcc();
+  });
+
   chargerPorts();
   rafraichir();
+  lireAcc();
   setInterval(rafraichir, 300);
 })();
 </script>

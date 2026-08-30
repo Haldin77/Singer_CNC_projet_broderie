@@ -80,6 +80,10 @@ class Fluid:
         # le delai imparti alors que la carte avait repondu en 10 ms.
         self.compteur_etat = 0
         self.journal: deque = deque(maxlen=200)
+        # Compteur cumule des lignes de journal. Permet de savoir combien de
+        # lignes une commande a produites : la deque etant bornee, comparer
+        # sa longueur ne suffirait pas une fois pleine.
+        self.compteur_journal = 0
         # Compteurs cumules : permettent de suivre l'avancement sans
         # consommer la file d'accuses, dont l'envoyeur a besoin.
         self.compteur_ok = 0
@@ -188,7 +192,9 @@ class Fluid:
                 self._accuses.append(ligne)
             self._evenement.set()
             return
-        self.journal.append(ligne)
+        with self._verrou:
+            self.journal.append(ligne)
+            self.compteur_journal += 1
 
     # -- envoi -------------------------------------------------------------
 
@@ -251,6 +257,27 @@ class Fluid:
         """Envoie une ligne et attend son « ok » ou son « error »."""
         self.ligne(texte)
         return self.attendre_accuse(limite_s)
+
+    def interroger(self, texte: str,
+                   limite_s: float = 5.0) -> tuple[bool, list]:
+        """Envoie une commande et rend ses lignes de reponse.
+
+        Les « $... » de FluidNC repondent sur DEUX canaux : la valeur arrive
+        comme une ligne ordinaire, puis vient le « ok ». attendre_accuse() ne
+        rend que le second ; cette methode recupere aussi la premiere.
+
+        On compte les lignes de journal produites plutot que de comparer la
+        longueur de la deque : bornee a 200, elle cesse de grandir une fois
+        pleine et la difference serait nulle.
+        """
+        with self._verrou:
+            depart = self.compteur_journal
+        self.ligne(texte)
+        r = self.attendre_accuse(limite_s)
+        with self._verrou:
+            produites = self.compteur_journal - depart
+            lignes = list(self.journal)[-produites:] if produites > 0 else []
+        return r.ok, lignes
 
     def demander_etat(self, limite_s: float = 1.0) -> str:
         """Reclame un rapport d'etat et attend qu'il arrive.
