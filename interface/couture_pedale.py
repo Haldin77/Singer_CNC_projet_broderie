@@ -43,8 +43,9 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections import deque
 
-from liaison import Fluid, Pedale
+from liaison import MARGE_TAMPON, TAMPON_FLUIDNC, Fluid, Pedale
 
 DEG_PAR_POINT = 360.0
 
@@ -307,6 +308,21 @@ class CoutureAPedale:
         annule = False            # la file a ete videe, on attend un reappui
         repos_depuis: float | None = None
 
+        # CONTROLE DE FLUX PAR COMPTAGE DE CARACTERES, comme l'envoyeur de
+        # broderie. Son absence ici etait un vrai bug : a pleine cadence, la
+        # fenetre d'avance autorise une douzaine de tranches, soit pres de
+        # 290 octets, dans un tampon de reception qui en fait 127. La carte
+        # perdait des caracteres au milieu d'une ligne -- et un « $J=G91
+        # Z180 F216000 » ampute de son prefixe devient « G91 Z180 F216000 »,
+        # du G-code ordinaire envoye pendant un etat Jog : error:9.
+        #
+        # Le symptome n'apparaissait qu'a forte acceleration parce que la
+        # machine consommait alors les tranches assez vite pour que la boucle
+        # les renvoie en rafale.
+        octets_en_vol: deque = deque()
+        ok_vus = self.fluid.compteur_ok
+        limite_tampon = TAMPON_FLUIDNC - MARGE_TAMPON
+
         try:
             while not self._stop.is_set():
                 # Une erreur de la carte arrete tout, et on dit laquelle.
@@ -314,6 +330,15 @@ class CoutureAPedale:
                     self.erreur = ("Commande refusee par la carte : %s"
                                    % self.fluid.derniere_erreur)
                     return
+
+                # Chaque « ok » libere la plus ancienne ligne encore en vol.
+                # On lit le compteur cumule plutot que de consommer la file
+                # d'accuses : celle-ci sert aussi a l'envoi de broderie et aux
+                # commandes manuelles.
+                nouveaux = self.fluid.compteur_ok - ok_vus
+                ok_vus += nouveaux
+                for _ in range(min(nouveaux, len(octets_en_vol))):
+                    octets_en_vol.popleft()
 
                 maintenant = time.time()
                 if maintenant - dernier_sondage >= PERIODE_SONDAGE_S:
@@ -345,6 +370,10 @@ class CoutureAPedale:
                     if not annule and retard_deg > RELIQUAT_HOLD_DEG:
                         self.fluid.temps_reel(ANNULER_JOG)
                         annule = True
+                        # Les jogs jetes par 0x85 n'ont plus a etre attendus.
+                        # Les accuses de ceux deja parses continueront
+                        # d'arriver, et le compteur cumule les absorbera.
+                        octets_en_vol.clear()
 
                     if repos_depuis is None:
                         repos_depuis = maintenant
@@ -391,11 +420,20 @@ class CoutureAPedale:
                 # $J= et non G1 : seuls les jogs peuvent etre VIDES du
                 # planificateur par 0x85. Un jog n'accepte pas de mode modal
                 # separe, d'ou G91 dans la ligne elle-meme.
-                if not self.fluid.ligne("$J=G91 Z%.3f F%.0f"
-                                        % (distance, vitesse)):
+                texte = "$J=G91 Z%.3f F%.0f" % (distance, vitesse)
+
+                # Deuxieme garde-fou, independant de l'avance en degres : ne
+                # jamais mettre plus d'octets en vol que le tampon de la carte
+                # n'en peut contenir.
+                if sum(octets_en_vol) + len(texte) + 1 > limite_tampon:
+                    time.sleep(0.002)
+                    continue
+
+                if not self.fluid.ligne(texte):
                     self.erreur = (self.fluid.derniere_erreur
                                    or "Ecriture impossible sur le port serie.")
                     return
+                octets_en_vol.append(len(texte) + 1)
                 envoye_deg += distance
         finally:
             # A la sortie, la machine ne doit rien avoir en file. L'annulation

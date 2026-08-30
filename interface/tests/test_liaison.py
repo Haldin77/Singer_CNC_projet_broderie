@@ -390,6 +390,25 @@ def main() -> int:
         "%.3f s (un point entier a l'ancienne vitesse aurait pris ~3 s)"
         % (delai if delai is not None else -1))
 
+    # ---- pedale : le tampon de la carte ne doit jamais deborder ----------
+    # A pleine cadence, la fenetre d'avance en degres autorise une douzaine
+    # de tranches, soit pres de 290 octets, dans un tampon qui en fait 127.
+    # Sans comptage de caracteres, la carte perdait des caracteres au milieu
+    # d'une ligne : un « $J=... » ampute de son prefixe devenait du G-code
+    # ordinaire envoye en etat Jog, d'ou un error:9 en pleine couture.
+    print("\nPedale : le tampon de la carte ne deborde pas a pleine cadence")
+    faux2.occupation_max = 0
+    fin = time.time() + 2.0
+    while time.time() < fin:
+        uno.envoyer("P100")
+        time.sleep(0.04)
+    tout_bon &= verifier("plein gaz : le tampon reste sous la limite",
+                         faux2.occupation_max < TAMPON_FLUIDNC,
+                         "maxi %d octets sur %d"
+                         % (faux2.occupation_max, TAMPON_FLUIDNC))
+    tout_bon &= verifier("aucune erreur remontee par la boucle",
+                         not couture.erreur, couture.erreur)
+
     # ---- pedale : debrayage du volant a l'arret --------------------------
     # Une premiere version de cette fonction echouait « la plupart du
     # temps » : le feed hold gelait la file sans la vider, la carte restait
