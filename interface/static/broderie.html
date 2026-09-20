@@ -148,6 +148,17 @@
       <span id="envoi-texte">—</span>
       <span id="envoi-reste"></span>
     </div>
+    <!-- Dit POURQUOI la machine est arrêtée : changement de fil, levée de
+         pied, préparation de canette. Sans ça, un M0 ressemble à une panne. -->
+    <div id="bloc-pause" style="display:none;margin-top:12px;padding:12px;
+         border-radius:8px;background:#0b1220;border:1px solid #334155">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="pause-pastille" style="width:22px;height:22px;border-radius:5px;
+              border:1px solid #475569;display:none;flex:0 0 auto"></span>
+        <strong id="pause-titre"></strong>
+      </div>
+      <div class="soustitre" id="pause-detail" style="margin-top:6px"></div>
+    </div>
   </div>
 </div>
 
@@ -336,6 +347,8 @@
         <span id="lg-chauds" style="display:none"><i style="width:9px;height:9px;
           border-radius:50%;background:none;border:1.5px solid #ef4444"></i>zones surchargées</span>
       </div>
+      <!-- Les bobines à prévoir, dans l'ordre où la machine les demandera. -->
+      <div id="bloc-couleurs" style="display:none;margin-top:12px"></div>
       <div class="stats" id="stats" style="display:none">
         <div class="stat"><div class="v" id="s-points">—</div><div class="n">points</div></div>
         <div class="stat"><div class="v" id="s-minutes">—</div><div class="n">minutes</div></div>
@@ -389,6 +402,45 @@
   let motifPret = false;
   let occupe = false;      // une opération longue est en cours côté serveur
 
+  // ---------------------------------------------------------------- pauses
+  // Un M0 tout seul ressemble à une panne. On dit ce que la machine attend.
+  const PAUSES = {
+    "depart":       ["Prépare le fil de canette",
+                     "Tourne le volant à la main pour faire remonter le fil "
+                     + "du dessous, tire les deux fils vers l'arrière sous le "
+                     + "pied, puis reprends."],
+    "pied-lever":   ["Lève le pied",
+                     "Grand déplacement à venir : le pied écarte les disques "
+                     + "de tension, sinon le fil casse."],
+    "pied-baisser": ["Rebaisse le pied", "Le déplacement est terminé."],
+    "fin-pied":     ["Lève le pied", "Motif terminé."],
+    "fin-cadre":    ["Retire le cadre", "C'est fini."],
+    "arret":        ["Arrêt programmé", "Le motif demande une pause ici."],
+  };
+
+  function afficherPause(p) {
+    const bloc = $("bloc-pause");
+    if (!p) { bloc.style.display = "none"; return; }
+    bloc.style.display = "";
+    const pastille = $("pause-pastille");
+
+    if (p.genre === "couleur") {
+      pastille.style.display = p.couleur ? "" : "none";
+      if (p.couleur) pastille.style.background = p.couleur;
+      $("pause-titre").textContent = p.nom
+        ? "Change le fil — monte du " + p.nom
+        : "Change le fil (couleur n° " + (p.bloc + 1) + ")";
+      $("pause-detail").textContent = p.points
+        ? "Prochaine zone : " + p.ou + ", " + p.points + " points."
+        : "Dernier changement du motif.";
+    } else {
+      pastille.style.display = "none";
+      const t = PAUSES[p.genre] || ["Pause", ""];
+      $("pause-titre").textContent = t[0];
+      $("pause-detail").textContent = t[1] + (p.detail ? "  (" + p.detail + ")" : "");
+    }
+  }
+
   // ---------------------------------------------------------------- etat
   const CLASSES = { Idle:"idle", Run:"run", Jog:"run", Home:"run",
                     Alarm:"alarm", Hold:"hold", Door:"hold", Sleep:"off" };
@@ -426,6 +478,7 @@
 
       // Avancement de l'envoi
       const e = d.envoi;
+      // (afficherPause est défini plus bas, avant l'appel effectif)
       if (e && (e.etat === "envoi" || e.etat === "pause"
                 || e.etat === "erreur")) {
         $("bloc-envoi").style.display = "";
@@ -438,6 +491,7 @@
         if (e.etat === "erreur" && e.message) {
           messages("messages-lancement", [["erreur", e.message]]);
         }
+        afficherPause(e.pause);
       } else {
         $("bloc-envoi").style.display = "none";
       }
@@ -620,6 +674,25 @@
       $("apercu").innerHTML = d.apercu;
       $("legende").style.display = "flex";
       $("lg-chauds").style.display = d.points_chauds ? "inline" : "none";
+
+      // Les bobines à prévoir, dans l'ordre de passage.
+      const bc = $("bloc-couleurs");
+      if (d.couleurs && d.couleurs.length > 1) {
+        bc.style.display = "";
+        bc.innerHTML = "<div class='soustitre' style='margin-bottom:6px'>"
+          + d.couleurs.length + " bobines, dans cet ordre :</div>"
+          + d.couleurs.map((b, i) =>
+              "<div style='display:flex;align-items:center;gap:8px;"
+              + "padding:3px 0;font-size:12.5px'>"
+              + "<span style='width:16px;height:16px;border-radius:4px;"
+              + "border:1px solid #475569;flex:0 0 auto;background:"
+              + (b.couleur || "transparent") + "'></span>"
+              + "<span>" + (i + 1) + ". " + (b.nom || "couleur inconnue")
+              + "</span><span style='margin-left:auto;color:#64748b'>"
+              + b.points + " pts</span></div>").join("");
+      } else {
+        bc.style.display = "none";
+      }
       $("stats").style.display = "grid";
       $("s-points").textContent = d.stats.points;
       $("s-minutes").textContent = d.stats.minutes;

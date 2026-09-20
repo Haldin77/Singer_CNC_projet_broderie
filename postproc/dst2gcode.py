@@ -269,6 +269,10 @@ class DstToGcode:
         self.x = 0.0
         self.y = 0.0
         self.lines: list = []
+        # Journal des pauses : rang dans le fichier, nature, et de quoi
+        # renseigner l'operateur. C'est ce qui permet a l'interface de dire
+        # « change pour du rouge » plutot que « la machine est en pause ».
+        self.pauses: list = []
         self.last_f: float | None = None   # F est modal : inutile de le repeter
         # Point brode precedent : sert a connaitre la direction du dernier
         # point, donc le sens dans lequel revenir pour nouer le fil.
@@ -310,6 +314,18 @@ class DstToGcode:
 
     def emit(self, line: str = "") -> None:
         self.lines.append(line)
+
+    def noter_pause(self, genre: str, detail: str = "") -> None:
+        """Enregistre a QUEL RANG une pause tombe dans le fichier emis.
+
+        Sans cela, l'interface voit une machine arretee sur un M0 sans savoir
+        pourquoi : changement de couleur, levee de pied, ou arret programme.
+        Le rang est celui de la ligne NON VIDE ET NON COMMENTEE, car c'est
+        ainsi que l'envoyeur les compte -- il ne transmet pas le reste.
+        """
+        rang = sum(1 for l in self.lines
+                   if l.strip() and not l.lstrip().startswith(";"))
+        self.pauses.append({"ligne": rang, "genre": genre, "detail": detail})
 
     def emit_decalage_phase(self) -> None:
         """Recale l'origine de Z sur le point mort haut de l'aiguille.
@@ -512,6 +528,7 @@ class DstToGcode:
             self.comment("; saut de %.1f mm" % dist)
             self.comment("; LEVE LE PIED (il ecarte les disques de tension),")
             self.comment("; puis reprends. Sinon le deplacement tire sur le fil.")
+            self.noter_pause("pied-lever", "%.1f mm" % dist)
             self.emit(self.cfg.pause_command if self.cfg.compact
                       else "%s ; LEVE LE PIED puis reprends" % self.cfg.pause_command)
             self.stats.pauses_pied += 1
@@ -532,6 +549,7 @@ class DstToGcode:
 
         if pause:
             self.comment("; REBAISSE LE PIED avant de reprendre.")
+            self.noter_pause("pied-baisser")
             self.emit(self.cfg.pause_command if self.cfg.compact
                       else "%s ; REBAISSE LE PIED puis reprends" % self.cfg.pause_command)
 
@@ -561,6 +579,7 @@ class DstToGcode:
         self.comment(";   1. tourne le volant a la main pour remonter le fil de canette")
         self.comment(";   2. tire les deux fils vers l'arriere, sous le pied")
         self.comment(";   3. tiens-les mollement pendant les premiers points")
+        self.noter_pause("depart")
         self.emit(self.cfg.pause_command if self.cfg.compact
                   else "%s ; remonter le fil de canette ICI" % self.cfg.pause_command)
 
@@ -649,16 +668,19 @@ class DstToGcode:
 
         self.comment("; ---- fin du motif")
         self.comment("; LEVE LE PIED, puis reprends pour degager le cadre.")
+        self.noter_pause("fin-pied")
         self.emit(self.cfg.pause_command if self.cfg.compact
                   else "%s ; LEVE LE PIED puis reprends" % self.cfg.pause_command)
         if self.cfg.compact:
             if self.relatif:
                 self.emit("G90")
             self.emit("G0X0Y0")
+            self.noter_pause("fin-cadre")
             self.emit(self.cfg.pause_command)
             self.emit("M2")
             return
         self.emit("G0 X0 Y0")
+        self.noter_pause("fin-cadre")
         self.emit(self.cfg.pause_command + " ; retirer le cadre")
         self.emit("M2")
 
@@ -756,6 +778,7 @@ class DstToGcode:
                 if self.relatif:
                     self.emit("G90")
                 self.emit("G0X0Y0" if self.cfg.compact else "G0 X0 Y0")
+                self.noter_pause("couleur", str(self.stats.color_changes))
                 self.emit(self.cfg.pause_command if self.cfg.compact
                           else "%s ; changer le fil puis reprendre" % self.cfg.pause_command)
                 if not self.relatif:
@@ -776,6 +799,7 @@ class DstToGcode:
                 continue
 
             if base == pyembroidery.STOP:
+                self.noter_pause("arret")
                 self.emit(self.cfg.pause_command if self.cfg.compact
                           else "%s ; arret programme" % self.cfg.pause_command)
                 i += 1

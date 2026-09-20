@@ -389,6 +389,11 @@ def api_etat() -> object:
             "minutes_restantes": round(a.minutes_restantes, 1),
             "message": a.message,
         }
+        # La pause sur laquelle la machine est arretee, s'il y en a une.
+        # « confirmees » compte les lignes acquittees, et noter_pause() a
+        # enregistre le rang de chaque M0 dans la meme numerotation.
+        if infos["etat"] == "Hold" or a.etat == "pause":
+            infos["envoi"]["pause"] = _pause_courante(a.confirmees)
 
     infos["pedale"] = {
         "presente": bool(machine.pedale and machine.pedale.presente),
@@ -592,6 +597,82 @@ def api_convertir() -> object:
     })
 
 
+def _pause_courante(lignes_faites: int) -> dict | None:
+    """La pause sur laquelle la machine attend, d'apres l'avancement.
+
+    Chaque pause connait son rang de ligne. La machine s'arrete sur le M0 :
+    la pause en cours est donc la derniere dont le rang a ete atteint, a une
+    ligne pres -- le M0 est acquitte des qu'il est PLANIFIE, pas quand
+    l'operateur reprend.
+    """
+    candidates = [p for p in motif_courant.get("pauses", [])
+                  if lignes_faites >= p["ligne"]]
+    return candidates[-1] if candidates else None
+
+
+def _blocs_couleur(motif) -> tuple[list, bool]:
+    """Decoupe le motif en blocs de couleur. Rend (blocs, couleurs_connues).
+
+    ATTENTION AU FORMAT : le DST ne transporte AUCUNE couleur -- c'est une
+    limite du format, pas d'Ink/Stitch. Son en-tete porte « CO:0 » et sa
+    liste de fils est vide. pyembroidery invente alors une teinte au hasard,
+    ce qui serait pire que rien : on preferera le dire.
+
+    PES, JEF et VP3 stockent la liste des fils. Exporter dans l'un de ces
+    formats fait voyager les couleurs avec le motif.
+    """
+    import pyembroidery
+
+    blocs, courant = [], []
+    for cx, cy, cmd in motif.stitches:
+        base = cmd & 0xFF
+        if base == pyembroidery.STITCH:
+            courant.append((cx / 10.0, -cy / 10.0))
+        elif base in (pyembroidery.COLOR_CHANGE, pyembroidery.NEEDLE_SET,
+                      pyembroidery.END):
+            blocs.append(courant)
+            courant = []
+    if courant:
+        blocs.append(courant)
+    blocs = [b for b in blocs if b]
+
+    fils = list(motif.threadlist or [])
+    connues = len(fils) >= len(blocs) > 0
+
+    sortie = []
+    for i, points in enumerate(blocs):
+        fil = fils[i] if i < len(fils) else None
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        sortie.append({
+            "rang": i,
+            "points": len(points),
+            "couleur": fil.hex_color() if fil else None,
+            "nom": (fil.description or fil.catalog_number or "")
+                   if fil else "",
+            "marque": (fil.brand or "") if fil else "",
+            # Le centre de gravite du bloc : de quoi dire OU il se trouve
+            # dans le motif, en clair, plutot qu'en coordonnees brutes.
+            "centre": [round(sum(xs) / len(xs), 1),
+                       round(sum(ys) / len(ys), 1)],
+            "etendue": [round(max(xs) - min(xs), 1),
+                        round(max(ys) - min(ys), 1)],
+        })
+    return sortie, connues
+
+
+def _situer(centre: list, largeur: float, hauteur: float) -> str:
+    """Decrit en francais ou tombe un bloc dans le motif."""
+    x, y = centre
+    vertical = ("en haut" if y > hauteur / 6 else
+                "en bas" if y < -hauteur / 6 else "au milieu")
+    horizontal = ("a gauche" if x < -largeur / 6 else
+                  "a droite" if x > largeur / 6 else "au centre")
+    if vertical == "au milieu" and horizontal == "au centre":
+        return "au centre"
+    return "%s %s" % (vertical, horizontal)
+
+
 def _points_brodes(motif) -> list:
     """Positions des penetrations d'aiguille, en mm."""
     import pyembroidery
@@ -677,16 +758,44 @@ def _convertir_broderie(fichier) -> object:
 
     chemin = DOSSIER_SORTIE / "motif.nc"
     chemin.write_text(gcode, encoding="utf-8")
+    blocs, couleurs_connues = _blocs_couleur(motif)
+    apercu = image2points.trajets_depuis_broderie(motif)
+
+    # On relie chaque pause de changement de couleur au bloc qui SUIT : c'est
+    # la bobine a monter, pas celle qu'on vient de finir.
+    for p in conv.pauses:
+        if p["genre"] != "couleur":
+            continue
+        suivant = int(p["detail"])          # change #1 -> bloc 1
+        # Les cles existent TOUJOURS, meme sans bloc derriere : un fichier
+        # peut se terminer par un changement de couleur sans point apres,
+        # et l'interface ne doit pas avoir a s'en mefier.
+        b = blocs[suivant] if suivant < len(blocs) else None
+        p["bloc"] = suivant if b else None
+        p["couleur"] = b["couleur"] if b else None
+        p["nom"] = b["nom"] if b else ""
+        p["points"] = b["points"] if b else 0
+        p["ou"] = (_situer(b["centre"], apercu.largeur_mm, apercu.hauteur_mm)
+                   if b else "")
+
     motif_courant.clear()
     motif_courant.update({"gcode": gcode, "cadence": cadence,
-                          "chemin": str(chemin)})
+                          "chemin": str(chemin), "pauses": conv.pauses,
+                          "blocs": blocs})
 
-    apercu = image2points.trajets_depuis_broderie(motif)
     chauds = image2points.points_chauds(_points_brodes(motif))
     stats = conv.stats
     avertissements = ["Fichier deja numerise : les points viennent du "
                       "logiciel d'origine, aucun reglage de conversion ne "
                       "s'applique."]
+
+    if len(blocs) > 1 and not couleurs_connues:
+        avertissements.append(
+            "%d blocs de couleur, mais le fichier ne dit pas LESQUELLES : le "
+            "format DST ne transporte aucune couleur, c'est une limite du "
+            "format. Reexporte depuis Ink/Stitch en PES (ou JEF, ou VP3) et "
+            "l'interface t'annoncera la bobine a monter a chaque pause."
+            % len(blocs))
 
     if stats.points_trop_courts:
         avertissements.append(
@@ -733,8 +842,13 @@ def _convertir_broderie(fichier) -> object:
 
     return jsonify({
         "ok": True,
-        "apercu": image2points.apercu_svg(apercu, CADRE_X, CADRE_Y, chauds),
+        "apercu": image2points.apercu_svg(
+            apercu, CADRE_X, CADRE_Y, chauds,
+            [b["couleur"] for b in blocs] if couleurs_connues else None),
         "points_chauds": len(chauds),
+        "couleurs": blocs,
+        "couleurs_connues": couleurs_connues,
+        "pauses": conv.pauses,
         "avertissements": avertissements,
         "auto": [], "reglages_retenus": None,
         "stats": {

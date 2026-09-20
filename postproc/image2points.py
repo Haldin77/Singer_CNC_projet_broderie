@@ -1011,6 +1011,15 @@ def trajets_depuis_broderie(motif) -> Resultat:
     res = Resultat()
     courant: list = []
     xs, ys = [], []
+    # Rang du bloc de couleur courant. Stocke dans le role du trajet, sous la
+    # forme « couleur:N », pour que l'apercu puisse teinter chaque bloc de son
+    # vrai fil au lieu d'afficher un motif monochrome.
+    bloc = 0
+
+    def clore():
+        if len(courant) >= 2:
+            res.trajets.append(Trajet(points=list(courant),
+                                      role="couleur:%d" % bloc))
 
     for cx, cy, cmd in motif.stitches:
         base = cmd & 0xFF
@@ -1021,11 +1030,11 @@ def trajets_depuis_broderie(motif) -> Resultat:
             ys.append(y)
         else:
             # JUMP, TRIM, changement de couleur, fin : on coupe le trajet.
-            if len(courant) >= 2:
-                res.trajets.append(Trajet(points=courant, role="remplissage"))
+            clore()
             courant = []
-    if len(courant) >= 2:
-        res.trajets.append(Trajet(points=courant, role="remplissage"))
+            if base in (pyembroidery.COLOR_CHANGE, pyembroidery.NEEDLE_SET):
+                bloc += 1
+    clore()
 
     if xs:
         res.largeur_mm = max(xs) - min(xs)
@@ -1065,8 +1074,12 @@ def points_chauds(positions: list, taille_cellule_mm: float = 1.0,
 
 
 def apercu_svg(res: Resultat, cadre_x: float, cadre_y: float,
-               chauds: list | None = None) -> str:
-    """Trace des points, en SVG. Le fil en trait plein, les sauts en pointille."""
+               chauds: list | None = None, fils: list | None = None) -> str:
+    """Trace des points, en SVG. Le fil en trait plein, les sauts en pointille.
+
+    `fils` : couleurs reelles des blocs d'un motif deja numerise, dans
+    l'ordre. Fournies, chaque bloc est trace de sa vraie teinte.
+    """
     marge = 6
     ech = 4.0                                     # pixels par mm
     w = cadre_x * ech + marge * 2
@@ -1101,7 +1114,15 @@ def apercu_svg(res: Resultat, cadre_x: float, cadre_y: float,
     for t in res.trajets:
         d = " ".join("%s%.1f,%.1f" % ("M" if i == 0 else "L", *px(p))
                      for i, p in enumerate(t.points))
-        couleur, largeur = STYLE.get(t.role, ("#22c55e", 0.55))
+        if t.role.startswith("couleur:") and fils:
+            # Motif deja numerise : on trace chaque bloc dans son VRAI fil.
+            # Voir le motif tel qu'il sortira vaut mieux qu'un vert uniforme,
+            # surtout pour savoir quelle zone correspond a quelle bobine.
+            rang = int(t.role.split(":")[1])
+            couleur = fils[rang % len(fils)]
+            largeur = 0.7
+        else:
+            couleur, largeur = STYLE.get(t.role, ("#22c55e", 0.55))
         out.append('<path d="%s" fill="none" stroke="%s" stroke-width="%.2f" '
                    'stroke-linejoin="round" stroke-linecap="round"/>'
                    % (d, couleur, largeur))
