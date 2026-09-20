@@ -864,6 +864,10 @@ def main() -> int:
         print("Impossible de lire %s" % args.input, file=sys.stderr)
         return 1
 
+    # Meme recentrage que cote interface web : certains formats (PES...)
+    # gardent la position absolue du motif sur le canevas d'origine.
+    pattern.move_center_to_origin()
+
     conv = DstToGcode(cfg)
     gcode = conv.convert(pattern, args.input)
 

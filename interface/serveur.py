@@ -748,6 +748,17 @@ def _convertir_broderie(fichier) -> object:
         return jsonify({"ok": False,
                         "erreur": "Fichier de broderie illisible ou vide."}), 422
 
+    # Certains formats (PES notamment) conservent la position ABSOLUE du
+    # motif telle qu'elle etait sur le canevas du logiciel de numerisation --
+    # si le dessin n'etait pas centre sur la page Inkscape, ce decalage
+    # voyage tel quel jusqu'ici. Le DST, lui, n'encode que des deplacements
+    # RELATIFS d'un point au suivant : sans reference absolue, la plupart des
+    # lecteurs le font demarrer a (0,0), ce qui masquait le probleme.
+    # On recentre systematiquement sur la boite englobante du motif, pour
+    # que "0,0" corresponde toujours au centre du cadre, quel que soit le
+    # format d'origine.
+    motif.move_center_to_origin()
+
     cadence = _flottant("cadence", 250.0)
     cfg = dst2gcode.MachineConfig(
         stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
