@@ -535,6 +535,7 @@ def api_convertir() -> object:
     cfg = dst2gcode.MachineConfig(
         stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
         traversee_brodee_mm=traversee,
+        pause_saut_mm=_flottant("pause_saut", 20.0),
         decalage_phase_deg=DECALAGE_PHASE_Z_DEG)
     conv = dst2gcode.DstToGcode(cfg)
     gcode = conv.convert_paths([t.points for t in resultat.trajets],
@@ -763,6 +764,7 @@ def _convertir_broderie(fichier) -> object:
     cfg = dst2gcode.MachineConfig(
         stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
         traversee_brodee_mm=_flottant("traversee", 30.0),
+        pause_saut_mm=_flottant("pause_saut", 20.0),
         decalage_phase_deg=DECALAGE_PHASE_Z_DEG)
     conv = dst2gcode.DstToGcode(cfg)
     gcode = conv.convert(motif, Path(fichier.filename).name)

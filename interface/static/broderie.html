@@ -158,6 +158,11 @@
         <strong id="pause-titre"></strong>
       </div>
       <div class="soustitre" id="pause-detail" style="margin-top:6px"></div>
+      <!-- Dit ce qu'il NE faut PAS faire : sur cette machine, toutes les
+           pauses se ressemblent, et changer le fil sur une pause de pied
+           gache la broderie. -->
+      <div id="pause-consigne" style="margin-top:8px;font-size:12.5px;
+           font-weight:600"></div>
     </div>
   </div>
 </div>
@@ -267,8 +272,19 @@
             </label>
             <input type="range" id="traversee" min="0" max="60" step="5" value="30">
             <div class="reperes">
-              <span>0 — que des sauts, donc des pauses</span>
-              <span>60 — aucune pause</span>
+              <span>0 — que des sauts</span>
+              <span>60 — un maximum de traversées</span>
+            </div>
+          </div>
+          <div class="champ">
+            <label for="pause_saut">
+              S'arrêter pour lever le pied au-delà de
+              <span class="v" id="v-pause_saut">20</span> mm
+            </label>
+            <input type="range" id="pause_saut" min="0" max="120" step="10" value="20">
+            <div class="reperes">
+              <span>0 — ne jamais s'arrêter</span>
+              <span>120 — presque jamais</span>
             </div>
           </div>
           <div class="champ">
@@ -401,6 +417,7 @@
   let imageChoisie = null;
   let motifPret = false;
   let occupe = false;      // une opération longue est en cours côté serveur
+  let nbCouleurs = 0;      // bobines du motif chargé, pour situer les pauses
 
   // ---------------------------------------------------------------- pauses
   // Un M0 tout seul ressemble à une panne. On dit ce que la machine attend.
@@ -423,21 +440,39 @@
     if (!p) { bloc.style.display = "none"; return; }
     bloc.style.display = "";
     const pastille = $("pause-pastille");
+    const consigne = $("pause-consigne");
 
     if (p.genre === "couleur") {
+      // Une pause de couleur doit sauter aux yeux : c'est la seule où le
+      // fil se touche, et se tromper gâche la broderie.
+      bloc.style.background = "#3b2a06";
+      bloc.style.border = "2px solid var(--accent, #f59e0b)";
       pastille.style.display = p.couleur ? "" : "none";
       if (p.couleur) pastille.style.background = p.couleur;
+      const rang = (p.bloc || 0) + 1;
       $("pause-titre").textContent = p.nom
-        ? "Change le fil — monte du " + p.nom
-        : "Change le fil (couleur n° " + (p.bloc + 1) + ")";
+        ? "CHANGEMENT DE COULEUR — monte du " + p.nom
+        : "CHANGEMENT DE COULEUR — bobine n° " + rang;
       $("pause-detail").textContent = p.points
         ? "Prochaine zone : " + p.ou + ", " + p.points + " points."
         : "Dernier changement du motif.";
+      consigne.textContent = nbCouleurs
+        ? "Changement " + rang + " sur " + nbCouleurs + "."
+        : "";
+      consigne.style.color = "#fcd34d";
     } else {
+      bloc.style.background = "#0b1220";
+      bloc.style.border = "1px solid #334155";
       pastille.style.display = "none";
       const t = PAUSES[p.genre] || ["Pause", ""];
       $("pause-titre").textContent = t[0];
       $("pause-detail").textContent = t[1] + (p.detail ? "  (" + p.detail + ")" : "");
+      // Le piège : un arrêt pour lever le pied ressemble trait pour trait
+      // à un changement de couleur. On le dément explicitement.
+      consigne.textContent = nbCouleurs
+        ? "Ne touche pas au fil : ce n'est PAS un changement de couleur."
+        : "";
+      consigne.style.color = "#94a3b8";
     }
   }
 
@@ -607,7 +642,8 @@
 
   // ---------------------------------------------------------------- curseurs
   [["largeur","v-largeur"],["hauteur","v-hauteur"],["point","v-point"],
-   ["espacement","v-espacement"],["angle","v-angle"],["liaison","v-liaison"],["traversee","v-traversee"],["cadence","v-cadence"],
+   ["espacement","v-espacement"],["angle","v-angle"],["liaison","v-liaison"],["traversee","v-traversee"],
+   ["pause_saut","v-pause_saut"],["cadence","v-cadence"],
    ["largeur_trait","v-largeur_trait"],["densite_bourdon","v-densite_bourdon"],
    ["compensation","v-compensation"],["largeur_min","v-largeur_min"],
    ["seuil_simple","v-seuil_simple"],["bourdon_min","v-bourdon_min"]
@@ -643,6 +679,7 @@
     form.append("angle", $("angle").value);
     form.append("liaison", $("liaison").value);
     form.append("traversee", $("traversee").value);
+    form.append("pause_saut", $("pause_saut").value);
     form.append("largeur_trait", $("largeur_trait").value);
     form.append("densite_bourdon", $("densite_bourdon").value);
     form.append("compensation", $("compensation").value);
@@ -677,6 +714,7 @@
 
       // Les bobines à prévoir, dans l'ordre de passage.
       const bc = $("bloc-couleurs");
+      nbCouleurs = (d.couleurs && d.couleurs.length > 1) ? d.couleurs.length : 0;
       if (d.couleurs && d.couleurs.length > 1) {
         bc.style.display = "";
         bc.innerHTML = "<div class='soustitre' style='margin-bottom:6px'>"
