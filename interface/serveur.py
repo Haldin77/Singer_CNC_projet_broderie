@@ -568,7 +568,8 @@ def api_convertir() -> object:
 
     return jsonify({
         "ok": True,
-        "apercu": image2points.apercu_svg(resultat, CADRE_X, CADRE_Y, chauds),
+        "apercu": image2points.apercu_svg(resultat, CADRE_X, CADRE_Y, chauds,
+                                          traversee_brodee_mm=traversee),
         "points_chauds": len(chauds),
         "avertissements": avertissements,
         "auto": notes_auto,
@@ -761,9 +762,10 @@ def _convertir_broderie(fichier) -> object:
     motif.move_center_to_origin()
 
     cadence = _flottant("cadence", 250.0)
+    traversee = _flottant("traversee", 30.0)
     cfg = dst2gcode.MachineConfig(
         stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
-        traversee_brodee_mm=_flottant("traversee", 30.0),
+        traversee_brodee_mm=traversee,
         pause_saut_mm=_flottant("pause_saut", 20.0),
         decalage_phase_deg=DECALAGE_PHASE_Z_DEG)
     conv = dst2gcode.DstToGcode(cfg)
@@ -857,7 +859,8 @@ def _convertir_broderie(fichier) -> object:
         "ok": True,
         "apercu": image2points.apercu_svg(
             apercu, CADRE_X, CADRE_Y, chauds,
-            [b["couleur"] for b in blocs] if couleurs_connues else None),
+            [b["couleur"] for b in blocs] if couleurs_connues else None,
+            traversee_brodee_mm=traversee),
         "points_chauds": len(chauds),
         "couleurs": blocs,
         "couleurs_connues": couleurs_connues,

@@ -1074,11 +1074,20 @@ def points_chauds(positions: list, taille_cellule_mm: float = 1.0,
 
 
 def apercu_svg(res: Resultat, cadre_x: float, cadre_y: float,
-               chauds: list | None = None, fils: list | None = None) -> str:
+               chauds: list | None = None, fils: list | None = None,
+               traversee_brodee_mm: float = 0.0) -> str:
     """Trace des points, en SVG. Le fil en trait plein, les sauts en pointille.
 
     `fils` : couleurs reelles des blocs d'un motif deja numerise, dans
     l'ordre. Fournies, chaque bloc est trace de sa vraie teinte.
+
+    `traversee_brodee_mm` : DOIT correspondre au reglage utilise pour la
+    conversion en G-code (dst2gcode.MachineConfig.traversee_brodee_mm).
+    Sans ca, l'apercu affiche du pointille orange -- "ici, saut" -- meme
+    la ou le G-code brode en traversant : les deux etaient calcules
+    separement, l'un a partir du fichier brut, l'autre par la conversion,
+    et rien ne les gardait synchronises. Un ecart de gap est trace en trait
+    plein gris ("traversee"), comme ce qu'il va reellement se passer.
     """
     marge = 6
     ech = 4.0                                     # pixels par mm
@@ -1095,13 +1104,22 @@ def apercu_svg(res: Resultat, cadre_x: float, cadre_y: float,
                'stroke="#334155" stroke-width="1"/>'
                % (marge, marge, cadre_x * ech, cadre_y * ech))
 
-    # Sauts
+    # Sauts -- et traversees brodees, qui leur ressemblent geometriquement
+    # (meme trou entre deux trajets) mais que la machine va coudre plutot
+    # que sauter : le seuil decide, exactement comme dans dst2gcode.move_to.
     for a, b in zip(res.trajets, res.trajets[1:]):
-        x1, y1 = px(a.points[-1])
-        x2, y2 = px(b.points[0])
-        out.append('<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" '
-                   'stroke="#f59e0b" stroke-width="0.5" stroke-dasharray="2 2" '
-                   'opacity="0.55"/>' % (x1, y1, x2, y2))
+        p1, p2 = a.points[-1], b.points[0]
+        dist_mm = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+        x1, y1 = px(p1)
+        x2, y2 = px(p2)
+        if 0 < dist_mm <= traversee_brodee_mm:
+            out.append('<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" '
+                       'stroke="#94a3b8" stroke-width="0.5" opacity="0.7"/>'
+                       % (x1, y1, x2, y2))
+        else:
+            out.append('<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" '
+                       'stroke="#f59e0b" stroke-width="0.5" stroke-dasharray="2 2" '
+                       'opacity="0.55"/>' % (x1, y1, x2, y2))
 
     # Fil, chaque famille dans sa couleur
     STYLE = {
