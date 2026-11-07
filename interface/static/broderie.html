@@ -345,6 +345,51 @@
     </div>
 
     <button class="primaire" id="b-convertir" disabled>Convertir et prévisualiser</button>
+
+    <!-- Calibration : une propriété de la machine, mesurée une fois. -->
+    <div class="carte" style="margin-top:16px">
+      <details>
+        <summary><b>Calibration du cadre</b> — si les largeurs brodées ne sont pas justes</summary>
+        <div class="soustitre" style="margin:10px 0">
+          En vigueur : <span id="cal-actuelle">—</span>
+        </div>
+        <div class="soustitre" style="margin-bottom:8px">
+          <b>1.</b> Charge le motif de mesure et brode-le sur un tissu stable
+          (un drap), bien tendu : quatre bandes en zigzag, sans aucune
+          correction.
+        </div>
+        <button id="b-cal-mesure">Charger le motif de mesure</button>
+        <div class="soustitre" style="margin:12px 0 8px">
+          <b>2.</b> Mesure chaque bande <b>dans le sens des points</b>, au
+          milieu de sa longueur : d'une rangée de trous à l'autre, au pied à
+          coulisse si tu en as un. Ignore le trou isolé au tout début d'une
+          bande — celui où le cadre arrive de son saut.
+        </div>
+        <div class="rangee" style="gap:8px;flex-wrap:wrap">
+          <label style="flex:1 1 45%">Horizontale étroite (10)
+            <input type="number" step="0.05" min="0" id="cal-x10" placeholder="mm"></label>
+          <label style="flex:1 1 45%">Horizontale large (80)
+            <input type="number" step="0.05" min="0" id="cal-x80" placeholder="mm"></label>
+          <label style="flex:1 1 45%">Verticale étroite (10)
+            <input type="number" step="0.05" min="0" id="cal-y10" placeholder="mm"></label>
+          <label style="flex:1 1 45%">Verticale large (80)
+            <input type="number" step="0.05" min="0" id="cal-y80" placeholder="mm"></label>
+        </div>
+        <div class="soustitre" style="margin:8px 0">
+          Un axe juste peut rester vide : seul l'axe renseigné est corrigé.
+        </div>
+        <button class="primaire" id="b-cal-calculer">Calculer et enregistrer</button>
+        <div class="soustitre" style="margin:12px 0 8px">
+          <b>3.</b> Vérifie : le même motif, corrigé. Les bandes doivent
+          mesurer 10 et 80 mm.
+        </div>
+        <div class="rangee" style="gap:8px">
+          <button id="b-cal-verif">Charger le motif de vérification</button>
+          <button id="b-cal-zero">Remettre à zéro</button>
+        </div>
+        <div id="cal-messages"></div>
+      </details>
+    </div>
   </div>
 
   <!-- ================= colonne droite : apercu ================= -->
@@ -457,9 +502,12 @@
       $("pause-detail").textContent = p.points
         ? "Prochaine zone : " + p.ou + ", " + p.points + " points."
         : "Dernier changement du motif.";
-      consigne.textContent = nbCouleurs
-        ? "Changement " + rang + " sur " + nbCouleurs + "."
-        : "";
+      // Le pied : on le lève pour enfiler (les disques de tension s'ouvrent
+      // et le fil s'y loge), mais repartir pied levé, c'est broder SANS
+      // tension -- le nid de fil assuré dès le premier point.
+      consigne.textContent = "Coupe l'ancien fil, enfile le nouveau, "
+        + "REBAISSE LE PIED, puis tiens le bout pendant les premiers points."
+        + (nbCouleurs ? "  Bobine " + rang + " sur " + nbCouleurs + "." : "");
       consigne.style.color = "#fcd34d";
     } else {
       bloc.style.background = "#0b1220";
@@ -709,6 +757,18 @@
         return;
       }
 
+      afficherMotif(d);
+    } catch (e) {
+      messages("messages", [["erreur", "Le serveur n'a pas répondu : " + e]]);
+    } finally {
+      b.disabled = false;
+      b.textContent = "Convertir et prévisualiser";
+    }
+  });
+
+  // Un motif converti -- fichier, image, ou motif de calibration -- est
+  // affiché et prêt à broder, toujours de la même façon.
+  function afficherMotif(d) {
       $("apercu").innerHTML = d.apercu;
       $("legende").style.display = "flex";
       $("lg-chauds").style.display = d.points_chauds ? "inline" : "none";
@@ -758,12 +818,62 @@
       motifPret = true;
       $("b-lancer").disabled = false;
       $("b-telecharger").disabled = false;
+  }
+
+  // ---------------------------------------------------------------- calibration
+  async function majCalibration() {
+    try {
+      const d = await (await fetch("/api/calibration")).json();
+      $("cal-actuelle").textContent = d.texte;
+    } catch (e) { /* serveur absent : on laisse l'ancien texte */ }
+  }
+  majCalibration();
+
+  async function chargerMotifCalibration(corrige) {
+    const form = new FormData();
+    form.append("corrige", corrige ? "1" : "0");
+    form.append("cadence", $("cadence").value);
+    form.append("pause_saut", $("pause_saut").value);
+    try {
+      const d = await (await fetch("/api/calibration/motif",
+                                   { method:"POST", body:form })).json();
+      if (d.ok) afficherMotif(d);
+      else messages("cal-messages", [["erreur", d.erreur || "Refusé."]]);
     } catch (e) {
-      messages("messages", [["erreur", "Le serveur n'a pas répondu : " + e]]);
-    } finally {
-      b.disabled = false;
-      b.textContent = "Convertir et prévisualiser";
+      messages("cal-messages", [["erreur", "Le serveur n'a pas répondu : " + e]]);
     }
+  }
+  $("b-cal-mesure").addEventListener("click", () => chargerMotifCalibration(false));
+  $("b-cal-verif").addEventListener("click", () => chargerMotifCalibration(true));
+
+  $("b-cal-calculer").addEventListener("click", async () => {
+    const mesures = {};
+    ["x10", "x80", "y10", "y80"].forEach(n => {
+      const v = $("cal-" + n).value.replace(",", ".");
+      if (v !== "") mesures[n] = parseFloat(v);
+    });
+    try {
+      const d = await (await fetch("/api/calibration/mesures", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(mesures)})).json();
+      const msgs = (d.refus || []).map(r => ["erreur", r]);
+      if (d.axes && d.axes.length)
+        msgs.unshift(["succes", "Correction enregistrée pour " + d.axes.join(" et ")
+          + ". Elle s'applique aux prochaines conversions -- reconvertis ton motif."]);
+      if (!msgs.length)
+        msgs.push(["avert", "Renseigne les deux bandes d'un même axe (10 et 80 mm)."]);
+      messages("cal-messages", msgs);
+      $("cal-actuelle").textContent = d.texte;
+    } catch (e) {
+      messages("cal-messages", [["erreur", "Le serveur n'a pas répondu : " + e]]);
+    }
+  });
+
+  $("b-cal-zero").addEventListener("click", async () => {
+    const d = await (await fetch("/api/calibration/reinitialiser",
+                                 { method:"POST" })).json();
+    $("cal-actuelle").textContent = d.texte;
+    messages("cal-messages", [["avert", "Correction remise à zéro."]]);
   });
 
   // ---------------------------------------------------------------- lancement

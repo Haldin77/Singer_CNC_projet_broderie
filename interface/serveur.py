@@ -17,10 +17,13 @@ pilote le mode couture.
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import re
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 try:
     from flask import Flask, Response, jsonify, request, send_from_directory
@@ -71,6 +74,36 @@ PARK_Y = 5.0
 DECALAGE_PHASE_Z_DEG = -29.0
 
 DOSSIER_SORTIE = Path(__file__).resolve().parent.parent / "gcode"
+
+# Compensation de la mecanique du cadre (echelle et flexion par axe),
+# mesuree avec le motif de calibration de l'interface. Propriete de la
+# MACHINE : elle s'applique a tous les motifs, et survit aux redemarrages.
+#
+# Ignore par git (.gitignore) : le fichier nait sur le serveur. Versionne,
+# un exemplaire venu du PC ecraserait la mesure du serveur -- ou bloquerait
+# le « git pull » du redeploiement automatique.
+FICHIER_CALIBRATION = DOSSIER_SORTIE / "reglages_machine.json"
+CALIBRATION_NEUTRE = {"echelle_x": 1.0, "echelle_y": 1.0,
+                      "flexion_x_mm": 0.0, "flexion_y_mm": 0.0}
+
+
+def calibration() -> dict:
+    """La compensation en vigueur ; neutre si rien n'a ete mesure."""
+    valeurs = dict(CALIBRATION_NEUTRE)
+    try:
+        lues = json.loads(FICHIER_CALIBRATION.read_text(encoding="utf-8"))
+        valeurs.update({k: float(v) for k, v in lues.items()
+                        if k in CALIBRATION_NEUTRE})
+    except (OSError, ValueError):
+        pass
+    return valeurs
+
+
+def enregistrer_calibration(valeurs: dict) -> None:
+    DOSSIER_SORTIE.mkdir(parents=True, exist_ok=True)
+    FICHIER_CALIBRATION.write_text(json.dumps(valeurs, indent=2),
+                                   encoding="utf-8")
+
 
 RE_ETAT = re.compile(r"<([A-Za-z]+)[|:]")
 RE_MPOS = re.compile(r"MPos:([-\d.]+),([-\d.]+),([-\d.]+)")
@@ -360,14 +393,23 @@ def api_etat() -> object:
 
     brut = machine.fluid.etat
 
-    # On ne reclame l'etat que si personne d'autre ne parle a la carte, et
-    # au plus deux fois par seconde. Interroger pendant que la pedale envoie
-    # ses points ajoute des ecritures concurrentes pour rien : le dernier
-    # rapport connu suffit largement a l'affichage.
-    occupee = ((machine.envoyeur and machine.envoyeur.en_cours)
-               or (machine.couture and machine.couture.active))
+    # Au plus deux interrogations par seconde.
+    #
+    # PENDANT UNE BRODERIE AUSSI. Elle en etait exclue, et c'etait une erreur
+    # lourde : sans « ? », la carte n'envoie aucun rapport, l'etat affiche
+    # restait celui d'AVANT le lancement, et une machine arretee sur un M0
+    # n'apparaissait jamais en « Hold ». Le bandeau qui distingue un
+    # changement de couleur d'une levee de pied ne s'affichait donc jamais.
+    #
+    # « ? » est un caractere temps reel : il n'occupe pas le tampon de
+    # lignes, ne produit pas de « ok », et les ecritures sont serialisees --
+    # il ne peut ni couper une ligne ni fausser le comptage de l'envoyeur.
+    #
+    # Seule la couture a la pedale s'en passe : sa boucle interroge deja la
+    # carte elle-meme, au rythme qui lui convient.
+    pedale_active = bool(machine.couture and machine.couture.active)
     maintenant = time.time()
-    if not occupee and maintenant - _dernier_sondage[0] > 0.5:
+    if not pedale_active and maintenant - _dernier_sondage[0] > 0.5:
         _dernier_sondage[0] = maintenant
         brut = machine.fluid.demander_etat(limite_s=0.5)
 
@@ -536,7 +578,7 @@ def api_convertir() -> object:
         stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
         traversee_brodee_mm=traversee,
         pause_saut_mm=_flottant("pause_saut", 20.0),
-        decalage_phase_deg=DECALAGE_PHASE_Z_DEG)
+        decalage_phase_deg=DECALAGE_PHASE_Z_DEG, **calibration())
     conv = dst2gcode.DstToGcode(cfg)
     gcode = conv.convert_paths([t.points for t in resultat.trajets],
                                Path(fichier.filename).name)
@@ -551,8 +593,9 @@ def api_convertir() -> object:
     stats = conv.stats
     avertissements = list(resultat.avertissements)
 
-    chauds = image2points.points_chauds(
-        [p for t in resultat.trajets for p in t.points])
+    # Sur les piqures que la machine fera vraiment -- noeuds et traversees
+    # compris --, pas sur les trajets d'avant conversion.
+    chauds = image2points.points_chauds(conv.piqures)
     if chauds:
         avertissements.append(
             "%d zones de 1 mm recoivent plus de 12 penetrations d'aiguille "
@@ -600,16 +643,24 @@ def api_convertir() -> object:
 
 
 def _pause_courante(lignes_faites: int) -> dict | None:
-    """La pause sur laquelle la machine attend, d'apres l'avancement.
+    """Le M0 sur lequel la machine attend, d'apres l'avancement.
 
-    Chaque pause connait son rang de ligne. La machine s'arrete sur le M0 :
-    la pause en cours est donc la derniere dont le rang a ete atteint, a une
-    ligne pres -- le M0 est acquitte des qu'il est PLANIFIE, pas quand
-    l'operateur reprend.
+    Chaque pause connait le rang de son M0. Or FluidNC n'accuse un M0
+    qu'APRES la reprise : il termine les mouvements en cours, passe en
+    Hold, puis reste bloque dans sa boucle de suspension jusqu'au « ~ »
+    (GCode.cpp, ProgramFlow::Paused -> protocol_exec_rt_suspend). Pendant
+    l'attente, toutes les lignes AVANT le M0 sont accusees et lui ne l'est
+    pas : le nombre de lignes accusees est EXACTEMENT son rang.
+
+    L'egalite stricte compte. « La derniere pause deja atteinte » -- la
+    regle precedente -- designait, pendant une pause manuelle au milieu
+    d'une zone, le dernier M0 passe : on aurait annonce un changement de
+    couleur fini depuis longtemps. Hors d'un M0, rien n'est annonce.
     """
-    candidates = [p for p in motif_courant.get("pauses", [])
-                  if lignes_faites >= p["ligne"]]
-    return candidates[-1] if candidates else None
+    for p in motif_courant.get("pauses", []):
+        if p["ligne"] == lignes_faites:
+            return p
+    return None
 
 
 def _blocs_couleur(motif) -> tuple[list, bool]:
@@ -767,7 +818,7 @@ def _convertir_broderie(fichier) -> object:
         stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
         traversee_brodee_mm=traversee,
         pause_saut_mm=_flottant("pause_saut", 20.0),
-        decalage_phase_deg=DECALAGE_PHASE_Z_DEG)
+        decalage_phase_deg=DECALAGE_PHASE_Z_DEG, **calibration())
     conv = dst2gcode.DstToGcode(cfg)
     gcode = conv.convert(motif, Path(fichier.filename).name)
 
@@ -798,7 +849,11 @@ def _convertir_broderie(fichier) -> object:
                           "chemin": str(chemin), "pauses": conv.pauses,
                           "blocs": blocs})
 
-    chauds = image2points.points_chauds(_points_brodes(motif))
+    # Les zones surchargees se cherchent sur ce que la machine piquera
+    # VRAIMENT : le fichier source, plus nos noeuds et nos traversees, moins
+    # les points trop courts supprimes. Mesure sur l'aigle : le fichier
+    # annoncait 12 zones (pire 19), le G-code n'en a que 9 (pire 16).
+    chauds = image2points.points_chauds(conv.piqures)
     stats = conv.stats
     avertissements = ["Fichier deja numerise : les points viennent du "
                       "logiciel d'origine, aucun reglage de conversion ne "
@@ -882,6 +937,124 @@ def _convertir_broderie(fichier) -> object:
             "traversees": stats.traversees,
         },
     })
+
+
+# ---- calibration du cadre ------------------------------------------------
+
+def _texte_calibration(c: dict) -> str:
+    return ("X : echelle %.1f %%, flexion %.2f mm  |  Y : echelle %.1f %%, "
+            "flexion %.2f mm" % (c["echelle_x"] * 100, c["flexion_x_mm"],
+                                 c["echelle_y"] * 100, c["flexion_y_mm"]))
+
+
+@app.get("/api/calibration")
+def api_calibration() -> object:
+    c = calibration()
+    return jsonify({"ok": True, "valeurs": c, "texte": _texte_calibration(c)})
+
+
+@app.post("/api/calibration/motif")
+def api_calibration_motif() -> object:
+    """Charge le motif de calibration comme motif courant, pret a broder.
+
+    corrige=0 : SANS compensation -- c'est celui qu'on mesure, pour obtenir
+    les defauts bruts de la mecanique.
+    corrige=1 : AVEC la compensation en vigueur -- pour verifier qu'elle
+    tombe juste.
+
+    Ni traversee brodee (elle partirait d'un bord de bande et fausserait la
+    lecture), ni zone a eviter : quatre bandes, trois sauts.
+    """
+    corrige = request.form.get("corrige") == "1"
+    cadence = _flottant("cadence", 250.0)
+    cfg = dst2gcode.MachineConfig(
+        stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
+        traversee_brodee_mm=0.0,
+        pause_saut_mm=_flottant("pause_saut", 20.0),
+        decalage_phase_deg=DECALAGE_PHASE_Z_DEG,
+        **(calibration() if corrige else CALIBRATION_NEUTRE))
+    conv = dst2gcode.DstToGcode(cfg)
+    trajets = dst2gcode.motif_calibration()
+    nom = "calibration-%s" % ("verification" if corrige else "mesure")
+    gcode = conv.convert_paths(trajets, nom)
+
+    DOSSIER_SORTIE.mkdir(parents=True, exist_ok=True)
+    chemin = DOSSIER_SORTIE / "motif.nc"
+    chemin.write_text(gcode, encoding="utf-8")
+    motif_courant.clear()
+    motif_courant.update({"gcode": gcode, "cadence": cadence,
+                          "chemin": str(chemin), "pauses": conv.pauses})
+
+    apercu = SimpleNamespace(trajets=[image2points.Trajet(points=t, role="bourdon")
+                                      for t in trajets])
+    stats = conv.stats
+    return jsonify({
+        "ok": True,
+        "apercu": image2points.apercu_svg(apercu, CADRE_X, CADRE_Y),
+        "points_chauds": 0,
+        "avertissements": [
+            ("Motif de VERIFICATION, avec la correction en vigueur (%s). "
+             "Les bandes doivent mesurer 10 et 80 mm." % _texte_calibration(calibration()))
+            if corrige else
+            ("Motif de MESURE, sans aucune correction. Brode-le sur un tissu "
+             "stable bien tendu, puis mesure chaque bande DANS LE SENS DES "
+             "POINTS : d'une rangee de trous a l'autre.")],
+        "stats": {
+            "points": stats.stitches,
+            "minutes": round(stats.stitches / max(1.0, cadence), 1),
+            "pauses": stats.pauses_pied,
+            "traversees": stats.traversees,
+            "fil_m": round(sum(math.hypot(b[0] - a[0], b[1] - a[1])
+                               for t in trajets for a, b in zip(t, t[1:]))
+                           / 1000.0, 1),
+        },
+    })
+
+
+@app.post("/api/calibration/mesures")
+def api_calibration_mesures() -> object:
+    """Mesures des quatre bandes -> compensation, enregistree.
+
+    Un axe dont les deux bandes ne sont pas renseignees garde sa valeur.
+    Les resultats aberrants sont refuses plutot qu'enregistres : une faute
+    de frappe (80 tape 8) donnerait une echelle de 1000 %, et chaque motif
+    suivant sortirait du cadre.
+    """
+    d = request.get_json(silent=True) or {}
+    valeurs = calibration()
+    faits, refus = [], []
+    largeurs = {nom: largeur for nom, _, largeur, _ in dst2gcode.BANDES_CALIBRATION}
+
+    for axe in ("x", "y"):
+        try:
+            m_etroite = float(d.get(axe + "10"))
+            m_large = float(d.get(axe + "80"))
+        except (TypeError, ValueError):
+            continue
+        echelle, flexion = dst2gcode.compensation_depuis_mesures(
+            largeurs[axe + "10"], m_etroite, largeurs[axe + "80"], m_large)
+        if not (0.9 <= echelle <= 1.1 and -1.0 <= flexion <= 4.0):
+            refus.append(
+                "%s : %.1f %% et %.2f mm, hors de toute plausibilite -- "
+                "verifie tes mesures (bande etroite %.1f, large %.1f)."
+                % (axe.upper(), echelle * 100, flexion, m_etroite, m_large))
+            continue
+        valeurs["echelle_" + axe] = round(echelle, 4)
+        valeurs["flexion_%s_mm" % axe] = round(flexion, 2)
+        faits.append(axe.upper())
+
+    if faits:
+        enregistrer_calibration(valeurs)
+    return jsonify({"ok": bool(faits) and not refus, "axes": faits,
+                    "refus": refus, "valeurs": valeurs,
+                    "texte": _texte_calibration(valeurs)})
+
+
+@app.post("/api/calibration/reinitialiser")
+def api_calibration_reinitialiser() -> object:
+    enregistrer_calibration(dict(CALIBRATION_NEUTRE))
+    return jsonify({"ok": True, "valeurs": CALIBRATION_NEUTRE,
+                    "texte": _texte_calibration(CALIBRATION_NEUTRE)})
 
 
 @app.get("/api/broderie/fichier")

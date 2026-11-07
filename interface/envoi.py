@@ -27,6 +27,19 @@ CYCLE_START = b"~"
 SOFT_RESET = b"\x18"
 
 
+def est_piqure(ligne: str) -> bool:
+    """La ligne qui fait descendre l'aiguille : un G1 qui ne tourne que Z.
+
+    Chaque point s'ecrit en deux lignes -- le cadre bouge aiguille haute,
+    puis l'aiguille pique cadre immobile. C'est la seconde qui compte un
+    point, et c'est elle que l'estimation de temps doit compter : un saut,
+    un G92 ou un M0 sont des lignes aussi, mais ne coutent pas le temps
+    d'un point.
+    """
+    l = ligne.upper()
+    return l.startswith("G1") and "Z" in l and "X" not in l and "Y" not in l
+
+
 @dataclass
 class Avancement:
     total: int = 0
@@ -35,6 +48,13 @@ class Avancement:
     etat: str = "pret"          # pret | envoi | pause | fini | annule | erreur
     message: str = ""
     demarre_a: float = 0.0
+    # Pour l'estimation du temps restant : des POINTS, pas des lignes, et
+    # du temps de couture, pas du temps ecoule.
+    points_total: int = 0
+    points_faits: int = 0
+    temps_pause: float = 0.0    # cumul des attentes sur M0 et pauses manuelles
+    pause_depuis: float = 0.0   # debut de l'attente sur M0 en cours, 0 sinon
+    pause_manuelle_depuis: float = 0.0   # idem, pause demandee a l'interface
 
     @property
     def pourcent(self) -> float:
@@ -42,11 +62,32 @@ class Avancement:
 
     @property
     def minutes_restantes(self) -> float:
-        if self.confirmees < 5 or not self.demarre_a:
+        """Temps de couture restant, a la cadence REELLEMENT observee.
+
+        L'ancien calcul -- temps ecoule divise par lignes accusees -- avait
+        trois defauts. Le temps passe a changer de fil ou a lever le pied
+        entrait dans la moyenne : apres deux minutes de changement de
+        couleur, l'estimation s'envolait. Toutes les lignes pesaient pareil,
+        alors qu'un M0 ou un G92 ne coutent rien et qu'un point coute un tour
+        d'arbre. Et au demarrage, une vingtaine de lignes sont accusees d'un
+        coup -- planifiees, pas brodees --, ce qui faisait croire a une
+        machine tres rapide.
+
+        Ici : on compte les points, on retire les pauses -- y compris celle
+        en cours --, et on ne se prononce qu'apres 20 s de couture.
+        """
+        if not self.demarre_a or not self.points_faits:
             return 0.0
-        ecoule = time.time() - self.demarre_a
-        par_ligne = ecoule / self.confirmees
-        return (self.total - self.confirmees) * par_ligne / 60.0
+        maintenant = time.time()
+        pause = self.temps_pause
+        for debut in (self.pause_depuis, self.pause_manuelle_depuis):
+            if debut:
+                pause += maintenant - debut
+        couture = maintenant - self.demarre_a - pause
+        if couture < 20.0:
+            return 0.0
+        par_point = couture / self.points_faits
+        return (self.points_total - self.points_faits) * par_point / 60.0
 
 
 class Envoyeur:
@@ -56,6 +97,8 @@ class Envoyeur:
         self.fluid = fluid
         self.avancement = Avancement()
         self._lignes: list = []
+        self._piqures: list = []     # pour chaque ligne : fait-elle piquer ?
+        self._m0: list = []          # pour chaque ligne : est-ce un M0 ?
         self._fil: threading.Thread | None = None
         self._pause = threading.Event()
         self._stop = threading.Event()
@@ -88,8 +131,11 @@ class Envoyeur:
         # brodees et un trace deforme, sans le moindre message.
         self.fluid.vider()
 
+        self._piqures = [est_piqure(l) for l in self._lignes]
+        self._m0 = [l.upper().startswith("M0") for l in self._lignes]
         self.avancement = Avancement(total=len(self._lignes), etat="envoi",
-                                     demarre_a=time.time())
+                                     demarre_a=time.time(),
+                                     points_total=sum(self._piqures))
         self._pause.clear()
         self._stop.clear()
         self._fil = threading.Thread(target=self._boucle, daemon=True)
@@ -103,13 +149,22 @@ class Envoyeur:
     def pause(self) -> None:
         self._pause.set()
         self.fluid.temps_reel(FEED_HOLD)
-        self.avancement.etat = "pause"
+        a = self.avancement
+        a.etat = "pause"
+        # Le temps d'arret ne compte pas comme du temps de couture. Deja
+        # arretee sur un M0, la machine est decomptee par l'envoyeur.
+        if not a.pause_depuis and not a.pause_manuelle_depuis:
+            a.pause_manuelle_depuis = time.time()
 
     def reprendre(self) -> None:
         self.fluid.temps_reel(CYCLE_START)
         self._pause.clear()
-        if self.avancement.etat == "pause":
-            self.avancement.etat = "envoi"
+        a = self.avancement
+        if a.pause_manuelle_depuis:
+            a.temps_pause += time.time() - a.pause_manuelle_depuis
+            a.pause_manuelle_depuis = 0.0
+        if a.etat == "pause":
+            a.etat = "envoi"
 
     def annuler(self) -> None:
         """Arrete la broderie et laisse la carte dans un etat connu.
@@ -146,45 +201,59 @@ class Envoyeur:
     # -- boucle d'envoi ----------------------------------------------------
 
     def _boucle(self) -> None:
-        # Longueurs des lignes envoyees dont on attend encore l'accuse.
+        # Lignes envoyees dont on attend encore l'accuse : (longueur, rang).
         en_vol: deque = deque()
+        octets_en_vol = 0
         limite = TAMPON_FLUIDNC - MARGE_TAMPON
+        a = self.avancement
         i = 0
 
         try:
             while i < len(self._lignes) or en_vol:
                 if self._stop.is_set():
-                    self.avancement.etat = "annule"
+                    a.etat = "annule"
                     return
 
                 # On remplit le tampon tant qu'il reste de la place.
                 while (i < len(self._lignes) and not self._pause.is_set()
-                       and sum(en_vol) + len(self._lignes[i]) + 1 <= limite):
+                       and octets_en_vol + len(self._lignes[i]) + 1 <= limite):
                     ligne = self._lignes[i]
                     self.fluid.ligne(ligne)
-                    en_vol.append(len(ligne) + 1)
+                    en_vol.append((len(ligne) + 1, i))
+                    octets_en_vol += len(ligne) + 1
                     i += 1
-                    self.avancement.envoyees = i
+                    a.envoyees = i
 
                 # Puis on attend qu'une ligne soit digeree.
                 if en_vol:
-                    # Un M0 attend l'operateur : l'accuse peut mettre des
-                    # minutes a venir, et c'est normal. D'ou le drapeau
-                    # d'interruption -- sans lui, annuler pendant cette
-                    # attente laissait le fil vivant une heure.
+                    # Un M0 attend l'operateur : FluidNC ne l'accuse qu'a la
+                    # reprise, et l'accuse peut mettre des minutes a venir.
+                    # D'ou le drapeau d'interruption -- sans lui, annuler
+                    # pendant cette attente laissait le fil vivant une heure.
+                    #
+                    # Cette attente-la n'est pas du temps de couture : on la
+                    # met de cote pour l'estimation. (Une pause demandee a
+                    # l'interface est decomptee par pause()/reprendre().)
+                    if self._m0[en_vol[0][1]] and not a.pause_manuelle_depuis:
+                        a.pause_depuis = time.time()
                     r = self.fluid.attendre_accuse(limite_s=3600.0,
                                                    interruption=self._stop)
+                    if a.pause_depuis:
+                        a.temps_pause += time.time() - a.pause_depuis
+                        a.pause_depuis = 0.0
                     if self._stop.is_set():
-                        self.avancement.etat = "annule"
+                        a.etat = "annule"
                         return
                     if not r.ok:
-                        self.avancement.etat = "erreur"
-                        self.avancement.message = (
-                            "Ligne %d : %s" % (self.avancement.confirmees + 1,
-                                               r.texte))
+                        a.etat = "erreur"
+                        a.message = ("Ligne %d : %s"
+                                     % (a.confirmees + 1, r.texte))
                         return
-                    en_vol.popleft()
-                    self.avancement.confirmees += 1
+                    longueur, rang = en_vol.popleft()
+                    octets_en_vol -= longueur
+                    a.confirmees += 1
+                    if self._piqures[rang]:
+                        a.points_faits += 1
                 elif self._pause.is_set():
                     time.sleep(0.1)
 

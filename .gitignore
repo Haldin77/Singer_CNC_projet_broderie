@@ -38,3 +38,6 @@ desktop.ini
 .idea/
 *.swp
 *~
+
+# Calibration du cadre : mesuree sur la machine, propre au serveur
+gcode/reglages_machine.json
