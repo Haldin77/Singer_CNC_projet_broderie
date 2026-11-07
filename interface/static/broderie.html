@@ -360,23 +360,31 @@
         </div>
         <button id="b-cal-mesure">Charger le motif de mesure</button>
         <div class="soustitre" style="margin:12px 0 8px">
-          <b>2.</b> Mesure chaque bande <b>dans le sens des points</b>, au
-          milieu de sa longueur : d'une rangée de trous à l'autre, au pied à
-          coulisse si tu en as un. Ignore le trou isolé au tout début d'une
-          bande — celui où le cadre arrive de son saut.
+          <b>2.</b> Sans sortir le tissu du cadre, mesure chaque bande
+          <b>dans le sens des points</b> : de la pointe d'un zigzag (là où le
+          fil plonge dans le tissu) à la ligne des pointes d'en face. Trois
+          mesures par bande, à des endroits différents, et tu entres la
+          moyenne. Ignore le trou isolé au tout début d'une bande — celui où
+          le cadre arrive de son saut.
+          <br>On reconnaît les bandes à leurs points, pas à leur forme :
+          deux ont des points <b>latéraux (X)</b>, deux des points
+          <b>avant-arrière (Y)</b> ; dans chaque paire, l'une a des points
+          d'un centimètre, l'autre de huit.
         </div>
-        <div class="rangee" style="gap:8px;flex-wrap:wrap">
-          <label style="flex:1 1 45%">Horizontale étroite (10)
+        <div class="rangee" style="gap:8px">
+          <label>Points latéraux, courts (10)
             <input type="number" step="0.05" min="0" id="cal-x10" placeholder="mm"></label>
-          <label style="flex:1 1 45%">Horizontale large (80)
+          <label>Points latéraux, longs (80)
             <input type="number" step="0.05" min="0" id="cal-x80" placeholder="mm"></label>
-          <label style="flex:1 1 45%">Verticale étroite (10)
+          <label>Points avant-arrière, courts (10)
             <input type="number" step="0.05" min="0" id="cal-y10" placeholder="mm"></label>
-          <label style="flex:1 1 45%">Verticale large (80)
+          <label>Points avant-arrière, longs (80)
             <input type="number" step="0.05" min="0" id="cal-y80" placeholder="mm"></label>
         </div>
         <div class="soustitre" style="margin:8px 0">
-          Un axe juste peut rester vide : seul l'axe renseigné est corrigé.
+          Un axe juste — ses deux bandes à 0,2 mm près de 10 et 80 — reste
+          vide : seul l'axe renseigné est corrigé. Le motif de mesure est
+          toujours brodé sans correction : inutile de remettre à zéro avant.
         </div>
         <button class="primaire" id="b-cal-calculer">Calculer et enregistrer</button>
         <div class="soustitre" style="margin:12px 0 8px">
