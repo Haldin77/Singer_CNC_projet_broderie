@@ -403,6 +403,11 @@ def essai_calibration() -> bool:
     bon &= verifier("mesures enregistrees", r["ok"] and r["axes"] == ["X"]
                     and abs(r["valeurs"]["flexion_x_mm"] - 1.2) < 0.02,
                     r["texte"])
+    r = client.post("/api/calibration/mesures", json={"x10": 8.84}).get_json()
+    bon &= verifier("bande etroite seule : flexion, echelle juste",
+                    r["ok"] and r["valeurs"]["echelle_x"] == 1.0
+                    and abs(r["valeurs"]["flexion_x_mm"] - 1.2) < 0.02,
+                    r["texte"])
     r = client.post("/api/calibration/mesures",
                     json={"y10": 10.0, "y80": 8.0}).get_json()
     bon &= verifier("faute de frappe refusee, rien d'ecrase",

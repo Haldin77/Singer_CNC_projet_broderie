@@ -1085,6 +1085,13 @@ def compensation_depuis_mesures(largeur_etroite: float, mesure_etroite: float,
     return 1.0 / k, b / k
 
 
+def flexion_seule(largeur: float, mesure: float,
+                  pas: float = PAS_CALIBRATION_MM) -> tuple:
+    """(1.0, flexion_mm) d'apres la seule bande etroite, echelle supposee juste."""
+    u = largeur / math.hypot(largeur, pas)
+    return 1.0, (largeur - mesure) / u
+
+
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------

@@ -1025,19 +1025,36 @@ def api_calibration_mesures() -> object:
     faits, refus = [], []
     largeurs = {nom: largeur for nom, _, largeur, _ in dst2gcode.BANDES_CALIBRATION}
 
-    for axe in ("x", "y"):
+    def lire(cle):
         try:
-            m_etroite = float(d.get(axe + "10"))
-            m_large = float(d.get(axe + "80"))
+            return float(d.get(cle))
         except (TypeError, ValueError):
+            return None
+
+    for axe in ("x", "y"):
+        m_etroite, m_large = lire(axe + "10"), lire(axe + "80")
+        if m_etroite is None:
             continue
-        echelle, flexion = dst2gcode.compensation_depuis_mesures(
-            largeurs[axe + "10"], m_etroite, largeurs[axe + "80"], m_large)
+        if m_large is None:
+            # Bande etroite seule : on suppose l'echelle juste et on ne
+            # corrige que la flexion. C'est le cas le plus courant -- le
+            # pas des courroies se calcule, il ne derive pas --, et ca
+            # evite le piege de la bande longue « mesuree a l'oeil » : il
+            # y manque autant qu'a l'etroite, 1 mm sur 80 ne se voit pas,
+            # et taper 80 la ou il y a 79 inventerait une erreur d'echelle
+            # de 1,5 % qui retrecirait ensuite tous les grands motifs.
+            echelle, flexion = dst2gcode.flexion_seule(
+                largeurs[axe + "10"], m_etroite)
+            detail = "bande etroite %.2f" % m_etroite
+        else:
+            echelle, flexion = dst2gcode.compensation_depuis_mesures(
+                largeurs[axe + "10"], m_etroite, largeurs[axe + "80"], m_large)
+            detail = "bande etroite %.2f, large %.2f" % (m_etroite, m_large)
         if not (0.9 <= echelle <= 1.1 and -1.0 <= flexion <= 4.0):
             refus.append(
                 "%s : %.1f %% et %.2f mm, hors de toute plausibilite -- "
-                "verifie tes mesures (bande etroite %.1f, large %.1f)."
-                % (axe.upper(), echelle * 100, flexion, m_etroite, m_large))
+                "verifie tes mesures (%s)."
+                % (axe.upper(), echelle * 100, flexion, detail))
             continue
         valeurs["echelle_" + axe] = round(echelle, 4)
         valeurs["flexion_%s_mm" % axe] = round(flexion, 2)
