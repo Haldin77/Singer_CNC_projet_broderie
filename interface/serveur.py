@@ -41,9 +41,9 @@ except ImportError as e:
 
 from couture_pedale import CoutureAPedale, cadence_depuis_pedale  # noqa: E402
 from envoi import (Envoyeur, derniere_ligne_executee,              # noqa: E402
-                   positions_apres, programme_de_reprise)
-from liaison import (Fluid, Pedale, deviner, identifier_tous,     # noqa: E402
-                     lister_ports)
+                   position_travail, positions_apres, programme_de_reprise)
+from liaison import (Fluid, Pedale, deviner, identifier,          # noqa: E402
+                     identifier_tous, lister_ports)
 
 
 # ---------------------------------------------------------------------------
@@ -279,10 +279,16 @@ def api_pedale_connecter() -> object:
     """Rebranche la pedale seule, sans reinitialiser la carte."""
     if (r := exige_connexion()):
         return r
+    if (r := refus_si_broderie()):
+        return r
     port = (request.get_json(silent=True) or {}).get("port") or None
     if not port and not machine.port_pedale:
-        # Rien de connu : on cherche qui parle le langage de la pedale.
-        roles = identifier_tous(duree_s=3.0)
+        # Rien de connu : on cherche qui parle le langage de la pedale --
+        # SAUF sur le port de la carte. identifier_tous() rouvrait aussi
+        # celui-la : un second lecteur se partageait ses octets avec le notre
+        # et y ecrivait « ? », dont les reponses se melaient a la broderie.
+        roles = {pt["port"]: identifier(pt["port"], 3.0) for pt in lister_ports()
+                 if pt["port"] != machine.fluid.port_nom}
         port = next((p for p, r in roles.items() if r == "pedale"), None)
         if not port:
             return jsonify({
@@ -437,6 +443,10 @@ def api_etat() -> object:
             # l'apercu, et ce qu'il faut pour reprendre a un point donne.
             "point": a.points_avant + a.points_faits,
             "points_total": a.points_avant + a.points_total,
+            # Qualite de la liaison : ce qui doit tomber a zero quand le
+            # cablage est bon.
+            "brouillees": machine.fluid.compteur_brouille,
+            "resynchros": a.resynchros,
         }
         # Apres un arret, ce que la carte a dit en dernier : un ALARM, un
         # message de FluidNC, ou des caracteres brouilles -- la trace d'un
@@ -1229,29 +1239,6 @@ def api_reprendre_au_point() -> object:
     return jsonify({"ok": True, "faites": faites, "point": point})
 
 
-RE_OFFSET = re.compile(r"\[(G54|G92):([-\d.]+),([-\d.]+),([-\d.]+)")
-RE_WPOS = re.compile(r"WPos:([-\d.]+),([-\d.]+),([-\d.]+)")
-
-
-def _position_travail(rapport: str, lignes_dieze: list) -> tuple | None:
-    """Position en coordonnees de travail, d'apres « ? » et « $# »."""
-    m = RE_WPOS.search(rapport or "")
-    if m:
-        return tuple(float(v) for v in m.groups())
-    m = RE_MPOS.search(rapport or "")
-    if not m:
-        return None
-    pos = [float(v) for v in m.groups()]
-    vus = set()
-    for ligne in lignes_dieze:
-        o = RE_OFFSET.search(ligne)
-        if o:
-            vus.add(o.group(1))
-            for k in range(3):
-                pos[k] -= float(o.group(k + 2))
-    return tuple(pos) if vus == {"G54", "G92"} else None
-
-
 @app.post("/api/broderie/relancer")
 def api_relancer() -> object:
     """Reprend une broderie arretee, a la ligne qui suit la derniere executee.
@@ -1290,7 +1277,7 @@ def api_relancer() -> object:
 
     machine.fluid.vider()
     ok, lignes = machine.fluid.interroger("$#", limite_s=5.0)
-    position = _position_travail(rapport, lignes) if ok else None
+    position = position_travail(rapport, lignes) if ok else None
     if position is None:
         return jsonify({"ok": False, "erreur":
                         "La carte n'a pas donne sa position proprement (« $# » : "

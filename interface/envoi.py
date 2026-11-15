@@ -26,6 +26,33 @@ from liaison import MARGE_TAMPON, TAMPON_FLUIDNC, Fluid
 # Sans accuse pendant ce temps, l'envoyeur va voir ce que fait la carte.
 SURVEILLANCE_S = 2.0
 
+# Reprises automatiques permises par broderie. Au-dela, la liaison est trop
+# mauvaise pour continuer sans que quelqu'un regarde.
+RESYNCHROS_MAX = 50
+
+RE_MPOS = re.compile(r"MPos:([-\d.]+),([-\d.]+),([-\d.]+)")
+RE_WPOS = re.compile(r"WPos:([-\d.]+),([-\d.]+),([-\d.]+)")
+RE_OFFSET = re.compile(r"\[(G54|G92):([-\d.]+),([-\d.]+),([-\d.]+)")
+
+
+def position_travail(rapport: str, lignes_dieze: list) -> tuple | None:
+    """Position en coordonnees de travail, d'apres « ? » et « $# »."""
+    m = RE_WPOS.search(rapport or "")
+    if m:
+        return tuple(float(v) for v in m.groups())
+    m = RE_MPOS.search(rapport or "")
+    if not m:
+        return None
+    pos = [float(v) for v in m.groups()]
+    vus = set()
+    for ligne in lignes_dieze:
+        o = RE_OFFSET.search(ligne)
+        if o and o.group(1) not in vus:
+            vus.add(o.group(1))
+            for k in range(3):
+                pos[k] -= float(o.group(k + 2))
+    return tuple(pos) if vus == {"G54", "G92"} else None
+
 FEED_HOLD = b"!"
 CYCLE_START = b"~"
 SOFT_RESET = b"\x18"
@@ -171,6 +198,8 @@ class Avancement:
     # Reprise a un point donne : les points deja brodes avant ce programme,
     # pour afficher la position dans le motif ENTIER.
     points_avant: int = 0
+    # Arrets sur accuses perdus, repris seuls d'apres la position de la carte.
+    resynchros: int = 0
     temps_pause: float = 0.0    # cumul des attentes sur M0 et pauses manuelles
     pause_depuis: float = 0.0   # debut de l'attente sur M0 en cours, 0 sinon
     pause_manuelle_depuis: float = 0.0   # idem, pause demandee a l'interface
@@ -218,6 +247,7 @@ class Envoyeur:
         self._lignes: list = []
         self._piqures: list = []     # pour chaque ligne : fait-elle piquer ?
         self._m0: list = []          # pour chaque ligne : est-ce un M0 ?
+        self._attendues: list | None = None   # positions apres chaque ligne
         self._fil: threading.Thread | None = None
         self._pause = threading.Event()
         self._stop = threading.Event()
@@ -252,6 +282,7 @@ class Envoyeur:
 
         self._piqures = [est_piqure(l) for l in self._lignes]
         self._m0 = [l.upper().startswith("M0") for l in self._lignes]
+        self._attendues = None               # recalculees a la demande
         self.avancement = Avancement(total=len(self._lignes), etat="envoi",
                                      demarre_a=time.time(),
                                      points_total=sum(self._piqures),
@@ -365,26 +396,56 @@ class Envoyeur:
 
         Rend la reponse recue, ou None si l'envoi est declare bloque.
         """
-        a = self.avancement
         idle = 0
         while True:
             r = self.fluid.attendre_accuse(limite_s=SURVEILLANCE_S,
                                            interruption=self._stop)
             if not r.delai or self._stop.is_set():
                 return r
-            etat = self.fluid.demander_etat(limite_s=1.0) or ""
+            # Un rapport NEUF, sinon rien : sur une liaison qui brouille, le
+            # dernier rapport intact peut dater, et un vieux « Idle » ferait
+            # declarer arretee une machine qui brode.
+            etat = self.fluid.etat_frais(limite_s=1.0)
+            if etat is None:
+                continue
             idle = idle + 1 if etat.startswith("<Idle") else 0
             if idle >= 2:
-                a.etat = "bloque"
-                a.message = (
-                    "Arret : la carte a execute tout ce qu'elle a recu et "
-                    "attend la suite, mais %d accuse(s) « ok » ne sont jamais "
-                    "arrives. Le plus probable : des caracteres perdus sur "
-                    "le cable USB (parasites des moteurs). La broderie peut "
-                    "reprendre la ou elle s'est arretee." % len(en_vol))
-                if not a.pause_depuis:
-                    a.pause_depuis = time.time()
                 return None
+
+    def _resynchroniser(self) -> int | None:
+        """Retrouve, d'apres la position de la carte, la ligne ou reprendre.
+
+        Appele quand la carte est a l'arret alors que des « ok » manquent :
+        elle a tout execute, seuls les accuses se sont perdus. Sa position --
+        Z, angle cumule de l'arbre, designe un point sans ambiguite -- dit
+        quelle ligne elle a executee en dernier, et l'on repart de la
+        suivante. Sans intervention : la broderie marque une pause de
+        quelques secondes, et continue.
+
+        Rend le rang de la ligne a envoyer, ou None si le doute subsiste --
+        reponse illisible, carte pas en Idle, position qui ne correspond a
+        aucune ligne. On s'arrete alors, plutot que broder au mauvais endroit.
+        """
+        a = self.avancement
+        if a.resynchros >= RESYNCHROS_MAX:
+            return None
+        for _ in range(3):                   # la reponse peut arriver brouillee
+            self.fluid.vider()
+            ok, lignes = self.fluid.interroger("$#", limite_s=3.0)
+            rapport = self.fluid.etat_frais(limite_s=1.0)
+            if not ok or not rapport or not rapport.startswith("<Idle"):
+                continue
+            position = position_travail(rapport, lignes)
+            if position is None:
+                continue
+            if self._attendues is None:
+                self._attendues = positions_apres(self._lignes)
+            if self._attendues is None:
+                return None
+            derniere = derniere_ligne_executee(self._attendues, position,
+                                               a.confirmees - 1, a.envoyees)
+            return None if derniere is None else derniere + 1
+        return None
 
     def _boucle(self, depart: int = 0) -> None:
         # Lignes envoyees dont on attend encore l'accuse : (longueur, rang).
@@ -436,8 +497,29 @@ class Envoyeur:
                     if self._stop.is_set():
                         a.etat = "annule"
                         return
-                    if r is None:                     # carte a l'arret, muette
-                        return
+                    if r is None:
+                        # Carte a l'arret, accuses perdus : on se recale sur
+                        # sa position et l'on continue.
+                        rang = self._resynchroniser()
+                        if rang is None:
+                            a.etat = "bloque"
+                            a.message = (
+                                "Arret : la carte a execute tout ce qu'elle a "
+                                "recu et attend la suite, mais %d accuse(s) "
+                                "« ok » ne sont jamais arrives, et sa position "
+                                "n'a pas permis de repartir seul (%d reprise(s) "
+                                "automatique(s) deja faite(s)). Cause probable : "
+                                "liaison USB perturbee." % (len(en_vol), a.resynchros))
+                            if not a.pause_depuis:
+                                a.pause_depuis = time.time()
+                            return
+                        a.resynchros += 1
+                        en_vol.clear()
+                        octets_en_vol = 0
+                        i = rang
+                        a.envoyees = a.confirmees = rang
+                        a.points_faits = sum(self._piqures[:rang])
+                        continue
                     if not r.ok:
                         a.etat = "erreur"
                         a.message = ("Ligne %d refusee par la carte : %s"

@@ -148,6 +148,8 @@
       <span id="envoi-texte">—</span>
       <span id="envoi-reste"></span>
     </div>
+    <!-- Qualité de la liaison USB : doit rester vide. -->
+    <div id="envoi-liaison" class="soustitre" style="display:none;margin-top:4px;color:#fbbf24"></div>
     <!-- Arrêt inattendu : pourquoi, ce que la carte a dit, et la reprise. -->
     <div id="bloc-arret" style="display:none;margin-top:12px;padding:12px;
          border-radius:8px;background:#2a0f0f;border:2px solid #b91c1c">
@@ -621,6 +623,15 @@
           + (e.points_total ? (100 * e.point / e.points_total).toFixed(1) : 0) + " %)";
         $("envoi-reste").textContent = e.minutes_restantes > 0 && !arretee
           ? "≈ " + e.minutes_restantes + " min restantes" : "";
+        const liaison = $("envoi-liaison");
+        if (e.brouillees || e.resynchros) {
+          liaison.style.display = "";
+          liaison.textContent = "Liaison USB perturbée : " + e.brouillees
+            + " message(s) brouillé(s), " + e.resynchros
+            + " reprise(s) automatique(s). La broderie continue, mais le câble est à soigner.";
+        } else {
+          liaison.style.display = "none";
+        }
         // Un arrêt doit se voir en grand : un petit message en bas de page
         // laissait la machine plantée avec « Idle » pour seule explication.
         $("bloc-arret").style.display = arretee ? "" : "none";

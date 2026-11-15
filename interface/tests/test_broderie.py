@@ -20,6 +20,7 @@ defauts :
 from __future__ import annotations
 
 import io
+import os
 import math
 import sys
 import time
@@ -438,8 +439,11 @@ class FauxQuiPerd(FauxAvecHold):
 
     G54 = (1.0, 2.0, 0.0)
 
-    def __init__(self, perdus=(), refus=()) -> None:
+    def __init__(self, perdus=(), refus=(), brouilles=(), avales=()) -> None:
         self.perdus, self.refus = set(perdus), set(refus)
+        # Comme releve sur la machine : 64 octets illisibles AVANT le « ok »
+        # (brouilles), ou A SA PLACE (avales).
+        self.brouilles, self.avales = set(brouilles), set(avales)
         self.rang = 0                    # lignes de G-code recues
         self.executees: list = []
         self.travail = [0.0, 0.0, 0.0]
@@ -500,7 +504,11 @@ class FauxQuiPerd(FauxAvecHold):
                 self._reprise.wait(timeout=30.0)
                 self.en_m0 = False
             time.sleep(0.0005)
-            if rang not in self.perdus:
+            if rang in self.brouilles:
+                os.write(self.maitre, b"\xff" * 64 + b"ok\n")
+            elif rang in self.avales:
+                os.write(self.maitre, b"\xff" * 64 + b"\n")
+            elif rang not in self.perdus:
                 self._ecrire("ok")
 
 
@@ -554,16 +562,22 @@ def essai_reprise() -> bool:
         relances = _broder_jusqu_au_bout(serveur, faux)
 
         attendues = [l for k, l in enumerate(lignes) if k not in refus]
-        # (Le faux perd les « ok » d'apres un COMPTEUR de lignes recues : une
-        # ligne renvoyee a la reprise peut retomber dans la plage perdue et
-        # provoquer un second arret. C'est voulu : chacun doit etre constate.)
-        bon &= verifier("[%s] arret constate, pas d'attente muette" % nom,
-                        bool(relances) and all(e in ("bloque", "erreur")
-                                               for e, _ in relances),
-                        str([e for e, _ in relances]))
-        bon &= verifier("[%s] reprise acceptee" % nom,
-                        bool(relances) and all(r.get("ok") for _, r in relances),
-                        str([r for _, r in relances]))
+        if perdus:
+            # Accuses perdus : l'envoyeur se recale seul sur la position de
+            # la carte. Personne n'a a cliquer.
+            bon &= verifier("[%s] repris seul, sans intervention" % nom,
+                            not relances and serveur.machine.envoyeur.avancement.resynchros >= 1,
+                            "%d relance(s), %d reprise(s) auto" % (
+                                len(relances), serveur.machine.envoyeur.avancement.resynchros))
+        else:
+            # Ligne refusee : c'est une vraie erreur, on s'arrete et on le dit ;
+            # la reprise manuelle repart au bon endroit.
+            bon &= verifier("[%s] arret signale" % nom,
+                            bool(relances) and all(e == "erreur" for e, _ in relances),
+                            str([e for e, _ in relances]))
+            bon &= verifier("[%s] reprise acceptee" % nom,
+                            bool(relances) and all(r.get("ok") for _, r in relances),
+                            str([r for _, r in relances]))
         bon &= verifier("[%s] chaque ligne une fois, dans l'ordre" % nom,
                         faux.executees == attendues,
                         "%d executees / %d attendues"
@@ -674,6 +688,44 @@ def essai_reprise_au_point() -> bool:
     return bon
 
 
+def essai_liaison_brouillee() -> bool:
+    """Le releve de la machine : des lignes precedees de 64 octets
+    illisibles, « ok » intact a la fin -- ou avale. La broderie doit aller au
+    bout SANS intervention : accuses recuperés, et recalage automatique sur
+    la position de la carte quand ils sont vraiment perdus."""
+    print("\nLiaison qui brouille (releve reel)")
+    import envoi
+    import serveur
+    from envoi import Envoyeur
+    from liaison import Fluid
+
+    envoi.SURVEILLANCE_S = 0.3
+    conv = dst2gcode.DstToGcode(dst2gcode.MachineConfig(traversee_brodee_mm=0.0))
+    gcode = conv.convert_paths(dst2gcode.motif_calibration(), "cal")
+    lignes = lignes_envoyees(gcode)
+
+    faux = FauxQuiPerd(brouilles=range(100, 900, 9), avales=range(600, 607))
+    serveur.machine.fluid = Fluid(faux.port)
+    serveur.machine.fluid.ouvrir()
+    env = serveur.machine.envoyeur = Envoyeur(serveur.machine.fluid)
+    env.demarrer(gcode)
+    relances = _broder_jusqu_au_bout(serveur, faux)
+
+    bon = verifier("broderie menee au bout, sans intervention",
+                   env.avancement.etat == "fini" and not relances,
+                   "%s, %d relance(s) manuelle(s)" % (env.avancement.etat, len(relances)))
+    bon &= verifier("chaque ligne une fois, dans l'ordre", faux.executees == lignes,
+                    "%d / %d" % (len(faux.executees), len(lignes)))
+    bon &= verifier("lignes brouillees comptees",
+                    serveur.machine.fluid.compteur_brouille >= 80,
+                    str(serveur.machine.fluid.compteur_brouille))
+    bon &= verifier("accuses avales rattrapes par la position",
+                    env.avancement.resynchros >= 1, str(env.avancement.resynchros))
+    faux.arreter()
+    serveur.machine.fluid.fermer()
+    return bon
+
+
 def main() -> int:
     tout_bon = True
     tout_bon &= essai_changement_de_couleur()
@@ -686,6 +738,7 @@ def main() -> int:
     tout_bon &= essai_bandeau_pendant_la_broderie()
     tout_bon &= essai_reprise()
     tout_bon &= essai_reprise_au_point()
+    tout_bon &= essai_liaison_brouillee()
     print("\n%s" % ("Tout est bon." if tout_bon else "AU MOINS UN ECHEC."))
     return 0 if tout_bon else 1
 

@@ -17,6 +17,7 @@ Deux classes independantes :
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from collections import deque
@@ -93,6 +94,10 @@ class Fluid:
         self.compteur_ok = 0
         self.compteur_erreur = 0
         self.derniere_erreur = ""
+        # Lignes arrivees avec des caracteres parasites. Mesure de la qualite
+        # de la liaison : c'est ce chiffre qui doit tomber a zero quand on
+        # ameliore le cablage.
+        self.compteur_brouille = 0
 
         self._verrou = threading.Lock()
         # Verrou d'ECRITURE, distinct. serial.Serial.write n'est pas prevu
@@ -181,6 +186,29 @@ class Fluid:
     def _traiter(self, ligne: str) -> None:
         if not ligne:
             return
+        # Des lignes arrivent precedees d'un bloc de caracteres parasites --
+        # releve sur la machine : 64 octets illisibles, puis la fin INTACTE
+        # du message, « ok » compris. Le « ok » etait la, mais la ligne ne
+        # valait plus exactement « ok » : l'accuse etait perdu, et apres
+        # quelques-uns la broderie s'arretait.
+        #
+        # Tout ce que la carte envoie est de l'ASCII imprimable. On retire le
+        # reste, puis on reconnait la ligne si elle est redevenue exactement
+        # un accuse, une erreur ou un rapport complet. Un rapport dont le
+        # debut a ete mange (« ...031|FS:0,0> ») n'est pas complet : il va au
+        # journal, il ne doit surtout pas passer pour l'etat de la carte.
+        propre = "".join(c for c in ligne if " " <= c <= "~").strip()
+        if propre != ligne:
+            self.compteur_brouille += 1
+            with self._verrou:
+                self.journal.append(ligne)
+                self.compteur_journal += 1
+            bas = propre.lower()
+            if bas == "ok" or re.fullmatch(r"error:\d+", bas) or (
+                    propre.startswith("<") and propre.endswith(">")):
+                ligne = propre
+            else:
+                return
         if ligne.startswith("<") and ligne.endswith(">"):
             self.etat = ligne
             self.compteur_etat += 1
@@ -298,15 +326,26 @@ class Fluid:
         l'arret, deux rapports successifs sont identiques, et attendre une
         difference revenait a attendre le delai complet a chaque appel.
         """
+        frais = self.etat_frais(limite_s)
+        return frais if frais is not None else self.etat
+
+    def etat_frais(self, limite_s: float = 1.0) -> str | None:
+        """Comme demander_etat, mais None si aucun rapport NEUF n'est arrive.
+
+        Quand la liaison brouille, les rapports arrivent tronques et sont
+        ecartes : demander_etat rendrait alors le DERNIER rapport intact,
+        parfois vieux de plusieurs secondes. Pour decider qu'une broderie est
+        arretee, un vieux « Idle » ne vaut rien.
+        """
         repere = self.compteur_etat
         if not self.brut(b"?"):
-            return self.etat
+            return None
         fin = time.time() + limite_s
         while time.time() < fin:
             if self.compteur_etat != repere:
                 return self.etat
             time.sleep(0.002)
-        return self.etat
+        return None
 
 
 # ---------------------------------------------------------------------------
