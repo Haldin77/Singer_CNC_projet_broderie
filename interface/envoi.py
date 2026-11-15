@@ -15,12 +15,16 @@ machine ne marque pas de micro-arrets entre les points.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
 
 from liaison import MARGE_TAMPON, TAMPON_FLUIDNC, Fluid
+
+# Sans accuse pendant ce temps, l'envoyeur va voir ce que fait la carte.
+SURVEILLANCE_S = 2.0
 
 FEED_HOLD = b"!"
 CYCLE_START = b"~"
@@ -40,12 +44,62 @@ def est_piqure(ligne: str) -> bool:
     return l.startswith("G1") and "Z" in l and "X" not in l and "Y" not in l
 
 
+def positions_apres(lignes: list) -> list | None:
+    """Position de travail (x, y, z) de la machine apres chaque ligne.
+
+    Sert a retrouver, d'apres la position reelle de la carte, la derniere
+    ligne qu'elle a executee. Z est un angle cumule qui ne fait que croitre
+    entre deux remises a zero : il designe un point de broderie sans
+    ambiguite, la ou X et Y peuvent repasser au meme endroit.
+
+    None si le fichier passe en relatif (G91) : la position ne s'y deduit
+    plus ligne par ligne, et l'on ne reprendra pas a l'aveugle.
+    """
+    x = y = z = 0.0
+    sortie = []
+    for brute in lignes:
+        l = brute.upper().replace(" ", "")
+        if l.startswith("G91"):
+            return None
+        if l.startswith("G92"):
+            m = re.search(r"Z(-?[\d.]+)", l)
+            if m:
+                z = float(m.group(1))
+        elif l.startswith(("G0", "G1")) and not l.startswith("G10"):
+            for axe, valeur in re.findall(r"([XYZ])(-?[\d.]+)", l):
+                if axe == "X":
+                    x = float(valeur)
+                elif axe == "Y":
+                    y = float(valeur)
+                else:
+                    z = float(valeur)
+        sortie.append((x, y, z))
+    return sortie
+
+
+def derniere_ligne_executee(attendues: list, position: tuple,
+                            debut: int, fin: int) -> int | None:
+    """La derniere ligne de [debut, fin) qui laisse la machine en `position`.
+
+    Tolerances : 0,05 mm en X/Y (le fichier ecrit au centieme, un pas vaut
+    0,0125 mm) et 0,5 deg en Z (ecrit au dixieme, un pas vaut 0,225 deg).
+    """
+    px, py, pz = position
+    trouvee = None
+    for i in range(max(0, debut), min(fin, len(attendues))):
+        x, y, z = attendues[i]
+        if abs(x - px) <= 0.05 and abs(y - py) <= 0.05 and abs(z - pz) <= 0.5:
+            trouvee = i
+    return trouvee
+
+
 @dataclass
 class Avancement:
     total: int = 0
     envoyees: int = 0
     confirmees: int = 0
-    etat: str = "pret"          # pret | envoi | pause | fini | annule | erreur
+    # pret | envoi | pause | fini | annule | erreur | bloque
+    etat: str = "pret"
     message: str = ""
     demarre_a: float = 0.0
     # Pour l'estimation du temps restant : des POINTS, pas des lignes, et
@@ -143,6 +197,35 @@ class Envoyeur:
         return True
 
     @property
+    def lignes(self) -> list:
+        """Les lignes du motif, telles qu'elles partent vers la carte."""
+        return self._lignes
+
+    def reprendre_depuis(self, rang: int) -> bool:
+        """Relance l'envoi a la ligne `rang`, apres un arret.
+
+        A n'appeler qu'une fois la carte REVENUE a l'arret avec sa position
+        intacte, et `rang` choisi d'apres cette position -- c'est le travail
+        de la route /api/broderie/relancer, pas d'ici.
+        """
+        if self.en_cours or not self._lignes or not 0 <= rang <= len(self._lignes):
+            return False
+        self.fluid.vider()
+        a = self.avancement
+        if a.pause_depuis:                   # le temps d'arret n'est pas
+            a.temps_pause += time.time() - a.pause_depuis   # de la couture
+            a.pause_depuis = 0.0
+        a.etat, a.message = "envoi", ""
+        a.confirmees = a.envoyees = rang
+        a.points_faits = sum(self._piqures[:rang])
+        self._pause.clear()
+        self._stop.clear()
+        self._fil = threading.Thread(target=self._boucle, args=(rang,),
+                                     daemon=True)
+        self._fil.start()
+        return True
+
+    @property
     def en_cours(self) -> bool:
         return bool(self._fil and self._fil.is_alive())
 
@@ -200,13 +283,50 @@ class Envoyeur:
 
     # -- boucle d'envoi ----------------------------------------------------
 
-    def _boucle(self) -> None:
+    def _attendre_ou_constater(self, en_vol: deque):
+        """Attend l'accuse de la plus ancienne ligne en vol.
+
+        Sans limite de duree : une pause M0 peut durer le temps d'un repas,
+        et l'ancien delai d'une heure finissait par declarer en erreur une
+        broderie parfaitement saine.
+
+        Mais toutes les SURVEILLANCE_S sans accuse, on regarde ce que fait la
+        carte. En Run ou en Hold, elle brode ou attend l'operateur : on
+        patiente. En Idle deux fois de suite, elle a execute TOUT ce qu'elle a
+        recu et ne renverra plus rien : les « ok » manquants se sont perdus en
+        route. Avant, la machine restait plantee la, sans un mot, avec
+        « Idle » affiche. On le dit, et la broderie peut reprendre.
+
+        Rend la reponse recue, ou None si l'envoi est declare bloque.
+        """
+        a = self.avancement
+        idle = 0
+        while True:
+            r = self.fluid.attendre_accuse(limite_s=SURVEILLANCE_S,
+                                           interruption=self._stop)
+            if not r.delai or self._stop.is_set():
+                return r
+            etat = self.fluid.demander_etat(limite_s=1.0) or ""
+            idle = idle + 1 if etat.startswith("<Idle") else 0
+            if idle >= 2:
+                a.etat = "bloque"
+                a.message = (
+                    "Arret : la carte a execute tout ce qu'elle a recu et "
+                    "attend la suite, mais %d accuse(s) « ok » ne sont jamais "
+                    "arrives. Le plus probable : des caracteres perdus sur "
+                    "le cable USB (parasites des moteurs). La broderie peut "
+                    "reprendre la ou elle s'est arretee." % len(en_vol))
+                if not a.pause_depuis:
+                    a.pause_depuis = time.time()
+                return None
+
+    def _boucle(self, depart: int = 0) -> None:
         # Lignes envoyees dont on attend encore l'accuse : (longueur, rang).
         en_vol: deque = deque()
         octets_en_vol = 0
         limite = TAMPON_FLUIDNC - MARGE_TAMPON
         a = self.avancement
-        i = 0
+        i = depart
 
         try:
             while i < len(self._lignes) or en_vol:
@@ -218,7 +338,16 @@ class Envoyeur:
                 while (i < len(self._lignes) and not self._pause.is_set()
                        and octets_en_vol + len(self._lignes[i]) + 1 <= limite):
                     ligne = self._lignes[i]
-                    self.fluid.ligne(ligne)
+                    # Une ligne qui n'est pas partie ne sera jamais accusee.
+                    # La compter comme envoyee, c'etait attendre son « ok »
+                    # pour toujours, machine a l'arret et sans un mot.
+                    if not self.fluid.ligne(ligne):
+                        a.etat = "erreur"
+                        a.message = ("Ligne %d non transmise a la carte : %s"
+                                     % (i + 1, self.fluid.derniere_erreur
+                                        or "erreur d'ecriture serie"))
+                        a.pause_depuis = time.time()
+                        return
                     en_vol.append((len(ligne) + 1, i))
                     octets_en_vol += len(ligne) + 1
                     i += 1
@@ -228,26 +357,26 @@ class Envoyeur:
                 if en_vol:
                     # Un M0 attend l'operateur : FluidNC ne l'accuse qu'a la
                     # reprise, et l'accuse peut mettre des minutes a venir.
-                    # D'ou le drapeau d'interruption -- sans lui, annuler
-                    # pendant cette attente laissait le fil vivant une heure.
                     #
                     # Cette attente-la n'est pas du temps de couture : on la
                     # met de cote pour l'estimation. (Une pause demandee a
                     # l'interface est decomptee par pause()/reprendre().)
                     if self._m0[en_vol[0][1]] and not a.pause_manuelle_depuis:
                         a.pause_depuis = time.time()
-                    r = self.fluid.attendre_accuse(limite_s=3600.0,
-                                                   interruption=self._stop)
-                    if a.pause_depuis:
+                    r = self._attendre_ou_constater(en_vol)
+                    if a.pause_depuis and a.etat != "bloque":
                         a.temps_pause += time.time() - a.pause_depuis
                         a.pause_depuis = 0.0
                     if self._stop.is_set():
                         a.etat = "annule"
                         return
+                    if r is None:                     # carte a l'arret, muette
+                        return
                     if not r.ok:
                         a.etat = "erreur"
-                        a.message = ("Ligne %d : %s"
+                        a.message = ("Ligne %d refusee par la carte : %s"
                                      % (a.confirmees + 1, r.texte))
+                        a.pause_depuis = time.time()
                         return
                     longueur, rang = en_vol.popleft()
                     octets_en_vol -= longueur

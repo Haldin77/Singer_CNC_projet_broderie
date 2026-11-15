@@ -52,6 +52,10 @@ SILENCE_PEDALE_MAX_S = 2.5
 class Reponse:
     ok: bool
     texte: str
+    # Vrai si rien n'est arrive dans le delai : ce n'est pas un refus de la
+    # carte, seulement un silence. L'envoyeur s'en sert pour aller voir ce
+    # que fait la carte plutot que de conclure a une erreur.
+    delai: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +255,7 @@ class Fluid:
                     return Reponse(not a.lower().startswith("error"), a)
             self._evenement.wait(0.05)
             self._evenement.clear()
-        return Reponse(False, "pas de reponse apres %.0f s" % limite_s)
+        return Reponse(False, "pas de reponse apres %.0f s" % limite_s, True)
 
     def commande(self, texte: str, limite_s: float = 30.0) -> Reponse:
         """Envoie une ligne et attend son « ok » ou son « error »."""

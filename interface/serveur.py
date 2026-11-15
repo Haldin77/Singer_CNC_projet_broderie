@@ -40,7 +40,8 @@ except ImportError as e:
              "numpy et opencv-python-headless sont installes." % e)
 
 from couture_pedale import CoutureAPedale, cadence_depuis_pedale  # noqa: E402
-from envoi import Envoyeur                                        # noqa: E402
+from envoi import (Envoyeur, derniere_ligne_executee,              # noqa: E402
+                   positions_apres)
 from liaison import (Fluid, Pedale, deviner, identifier_tous,     # noqa: E402
                      lister_ports)
 
@@ -430,7 +431,14 @@ def api_etat() -> object:
             "pourcent": round(a.pourcent, 1),
             "minutes_restantes": round(a.minutes_restantes, 1),
             "message": a.message,
+            "reprise_possible": (a.etat in ("bloque", "erreur")
+                                 and not machine.envoyeur.en_cours),
         }
+        # Apres un arret, ce que la carte a dit en dernier : un ALARM, un
+        # message de FluidNC, ou des caracteres brouilles -- la trace d'un
+        # cable USB parasite.
+        if a.etat in ("bloque", "erreur"):
+            infos["envoi"]["journal"] = list(machine.fluid.journal)[-8:]
         # La pause sur laquelle la machine est arretee, s'il y en a une.
         # « confirmees » compte les lignes acquittees, et noter_pause() a
         # enregistre le rang de chaque M0 dans la meme numerotation.
@@ -454,6 +462,22 @@ def api_etat() -> object:
 def exige_connexion():
     if not machine.connectee:
         return jsonify({"ok": False, "erreur": "Machine non connectee."}), 409
+    return None
+
+
+def refus_si_broderie():
+    """Refuse toute commande pendant qu'un motif part vers la carte.
+
+    Chacune de ces routes envoie sa propre ligne et attend SON « ok » : elle
+    prenait le premier venu, qui appartenait a la broderie. L'envoyeur se
+    retrouvait avec un accuse en moins -- et, pire, la ligne s'executait au
+    milieu du motif : « un point » glissait un G91 qui passait toute la
+    suite du fichier en coordonnees relatives.
+    """
+    if machine.envoyeur and machine.envoyeur.en_cours:
+        return jsonify({"ok": False,
+                        "erreur": "Broderie en cours : arrete-la ou attends "
+                                  "la fin avant cette commande."}), 409
     return None
 
 
@@ -484,6 +508,8 @@ def api_commande() -> object:
 def api_homing() -> object:
     if (r := exige_connexion()):
         return r
+    if (r := refus_si_broderie()):
+        return r
     rep = machine.fluid.commande("$H", limite_s=180.0)
     if not rep.ok:
         return jsonify({"ok": False, "erreur": rep.texte}), 502
@@ -493,6 +519,8 @@ def api_homing() -> object:
 @app.post("/api/deverrouiller")
 def api_deverrouiller() -> object:
     if (r := exige_connexion()):
+        return r
+    if (r := refus_si_broderie()):
         return r
     rep = machine.fluid.commande("$X")
     return jsonify({"ok": rep.ok, "reponse": rep.texte})
@@ -1122,6 +1150,98 @@ def api_lancer() -> object:
     return jsonify({"ok": True, "faites": faites})
 
 
+RE_OFFSET = re.compile(r"\[(G54|G92):([-\d.]+),([-\d.]+),([-\d.]+)")
+RE_WPOS = re.compile(r"WPos:([-\d.]+),([-\d.]+),([-\d.]+)")
+
+
+def _position_travail(rapport: str, lignes_dieze: list) -> tuple | None:
+    """Position en coordonnees de travail, d'apres « ? » et « $# »."""
+    m = RE_WPOS.search(rapport or "")
+    if m:
+        return tuple(float(v) for v in m.groups())
+    m = RE_MPOS.search(rapport or "")
+    if not m:
+        return None
+    pos = [float(v) for v in m.groups()]
+    vus = set()
+    for ligne in lignes_dieze:
+        o = RE_OFFSET.search(ligne)
+        if o:
+            vus.add(o.group(1))
+            for k in range(3):
+                pos[k] -= float(o.group(k + 2))
+    return tuple(pos) if vus == {"G54", "G92"} else None
+
+
+@app.post("/api/broderie/relancer")
+def api_relancer() -> object:
+    """Reprend une broderie arretee, a la ligne qui suit la derniere executee.
+
+    On ne se fie pas au compteur d'accuses -- c'est justement lui qui est
+    faux quand des « ok » se perdent. On demande sa POSITION a la carte, et
+    l'on cherche quelle ligne la met exactement la. Z, l'angle cumule de
+    l'arbre, designe un point de broderie sans ambiguite.
+
+    Garde-fous, dans l'ordre :
+      - la carte doit etre en Idle : en Alarm elle a perdu sa position, en
+        Hold elle attend simplement « Reprendre » ;
+      - elle doit repondre proprement a « $# » : une ligne a moitie recue
+        qui trainerait dans sa memoire se collerait a cette commande et la
+        ferait echouer -- on le saurait avant d'envoyer la suite ;
+      - sa position doit correspondre a une ligne du motif. Sinon, rien.
+    """
+    if (r := exige_connexion()):
+        return r
+    env = machine.envoyeur
+    a = env.avancement
+    if env.en_cours:
+        return jsonify({"ok": False, "erreur": "L'envoi est encore en cours."}), 409
+    if a.etat not in ("bloque", "erreur") or not env.lignes:
+        return jsonify({"ok": False, "erreur": "Aucune broderie a reprendre."}), 409
+
+    rapport = machine.fluid.demander_etat(limite_s=1.0) or ""
+    m = RE_ETAT.search(rapport)
+    etat = m.group(1) if m else "?"
+    if etat != "Idle":
+        conseil = {"Hold": "elle attend une reprise : clique sur Reprendre.",
+                   "Alarm": "elle a perdu sa position (reset ou butee) : la "
+                            "broderie ne peut plus etre reprise sans decalage."}
+        return jsonify({"ok": False, "erreur": "La carte est en « %s » : %s"
+                        % (etat, conseil.get(etat, "reprise refusee par prudence."))}), 409
+
+    machine.fluid.vider()
+    ok, lignes = machine.fluid.interroger("$#", limite_s=5.0)
+    position = _position_travail(rapport, lignes) if ok else None
+    if position is None:
+        return jsonify({"ok": False, "erreur":
+                        "La carte n'a pas donne sa position proprement (« $# » : "
+                        "%s). Une ligne incomplete trainait peut-etre dans sa "
+                        "memoire : reprise refusee par prudence."
+                        % (" ".join(lignes)[:120] or "aucune reponse")}), 502
+
+    attendues = positions_apres(env.lignes)
+    if attendues is None:
+        return jsonify({"ok": False, "erreur": "Motif en coordonnees relatives : "
+                        "reprise impossible."}), 409
+    derniere = derniere_ligne_executee(attendues, position,
+                                       a.confirmees - 1, a.envoyees)
+    if derniere is None:
+        return jsonify({"ok": False, "erreur":
+                        "La carte est en X%.2f Y%.2f Z%.1f, ce qui ne correspond "
+                        "a aucune des lignes %d a %d du motif. Reprise refusee : "
+                        "elle broderait au mauvais endroit."
+                        % (position + (a.confirmees, a.envoyees))}), 409
+
+    if derniere + 1 >= len(env.lignes):
+        # Tout avait ete execute : seul le dernier « ok » s'etait perdu.
+        a.etat, a.message = "fini", ""
+        a.confirmees = a.envoyees = a.total
+        return jsonify({"ok": True, "ligne": a.total, "total": a.total,
+                        "termine": True})
+    env.reprendre_depuis(derniere + 1)
+    return jsonify({"ok": True, "ligne": derniere + 2, "total": a.total})
+
+
 @app.post("/api/broderie/pause")
 def api_pause() -> object:
     if (r := exige_connexion()):
@@ -1152,6 +1272,8 @@ def api_annuler() -> object:
 def api_parquer() -> object:
     if (r := exige_connexion()):
         return r
+    if (r := refus_si_broderie()):
+        return r
     machine.fluid.commande("G90 G53 G0 X%.3f Y%.3f" % (PARK_X, PARK_Y),
                            limite_s=90.0)
     return jsonify({"ok": True})
@@ -1167,6 +1289,8 @@ def api_couture_pedale() -> object:
                         "erreur": "Aucune pedale connectee."}), 409
     actif = bool((request.get_json(silent=True) or {}).get("actif"))
     if actif:
+        if (r := refus_si_broderie()):
+            return r
         erreur = machine.couture.demarrer()
         if erreur:
             return jsonify({"ok": False, "erreur": erreur,
@@ -1179,6 +1303,8 @@ def api_couture_pedale() -> object:
 @app.post("/api/couture/un-point")
 def api_un_point() -> object:
     if (r := exige_connexion()):
+        return r
+    if (r := refus_si_broderie()):
         return r
     if machine.couture:
         erreur = machine.couture.un_point()
@@ -1194,6 +1320,8 @@ def api_un_point() -> object:
 def api_aiguille_haute() -> object:
     if (r := exige_connexion()):
         return r
+    if (r := refus_si_broderie()):
+        return r
     erreur = machine.couture.aiguille_en_haut() if machine.couture else ""
     if erreur:
         return jsonify({"ok": False, "erreur": erreur}), 409
@@ -1208,9 +1336,14 @@ def api_diagnostic() -> object:
               "detail": ", ".join("%s (%s)" % (p["port"], p["devine"])
                                   for p in lister_ports()) or "aucun"}]
     if machine.connectee:
-        rep = machine.fluid.commande("$G")
-        tests.append({"nom": "Carte : commande $G", "ok": rep.ok,
-                      "detail": rep.texte[:150]})
+        if machine.envoyeur and machine.envoyeur.en_cours:
+            # « $G » volerait un accuse a la broderie ; « ? » ne coute rien.
+            tests.append({"nom": "Carte : commande $G", "ok": True,
+                          "detail": "non testee : broderie en cours"})
+        else:
+            rep = machine.fluid.commande("$G")
+            tests.append({"nom": "Carte : commande $G", "ok": rep.ok,
+                          "detail": rep.texte[:150]})
         etat = machine.fluid.demander_etat()
         tests.append({"nom": "Carte : rapport d'etat",
                       "ok": "MPos" in (etat or ""),

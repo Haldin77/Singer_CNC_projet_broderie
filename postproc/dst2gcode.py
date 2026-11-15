@@ -1031,9 +1031,14 @@ class DstToGcode:
 PAS_CALIBRATION_MM = 2.5     # avance entre deux traits du zigzag
 
 # nom, axe mesure, largeur demandee, rectangle (x0, x1, y0, y1) en mm
+#
+# Les bandes etroites sont PRES DU CENTRE, la ou l'on brode vraiment. Elles
+# etaient d'abord au bord gauche du champ, a 75 mm du centre : si le cadre
+# frotte davantage en bout de course, elles mesuraient ce bout de course et
+# non la machine, et la correction aurait ete fausse partout ailleurs.
 BANDES_CALIBRATION = [
-    ("y10", "y", 10.0, (-75.0, -55.0, -20.0, -10.0)),
-    ("x10", "x", 10.0, (-75.0, -65.0, 25.0, 45.0)),
+    ("y10", "y", 10.0, (0.0, 20.0, -20.0, -10.0)),
+    ("x10", "x", 10.0, (-20.0, -10.0, -15.0, 5.0)),
     ("x80", "x", 80.0, (-50.0, 30.0, 25.0, 45.0)),
     ("y80", "y", 80.0, (45.0, 65.0, -45.0, 35.0)),
 ]

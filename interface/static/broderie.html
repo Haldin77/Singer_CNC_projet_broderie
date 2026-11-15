@@ -148,6 +148,17 @@
       <span id="envoi-texte">—</span>
       <span id="envoi-reste"></span>
     </div>
+    <!-- Arrêt inattendu : pourquoi, ce que la carte a dit, et la reprise. -->
+    <div id="bloc-arret" style="display:none;margin-top:12px;padding:12px;
+         border-radius:8px;background:#2a0f0f;border:2px solid #b91c1c">
+      <strong>Broderie arrêtée</strong>
+      <div class="soustitre" id="arret-message" style="margin-top:6px"></div>
+      <pre id="arret-journal" style="display:none;margin:8px 0 0;font-size:11px;
+           white-space:pre-wrap;color:#fca5a5"></pre>
+      <button class="lancer" id="b-relancer" style="margin-top:10px;display:none">
+        Reprendre là où elle s'est arrêtée</button>
+      <div id="arret-retour" class="soustitre" style="margin-top:6px"></div>
+    </div>
     <!-- Dit POURQUOI la machine est arrêtée : changement de fil, levée de
          pied, préparation de canette. Sans ça, un M0 ressemble à une panne. -->
     <div id="bloc-pause" style="display:none;margin-top:12px;padding:12px;
@@ -576,18 +587,26 @@
       const e = d.envoi;
       // (afficherPause est défini plus bas, avant l'appel effectif)
       if (e && (e.etat === "envoi" || e.etat === "pause"
-                || e.etat === "erreur")) {
+                || e.etat === "erreur" || e.etat === "bloque")) {
         $("bloc-envoi").style.display = "";
         $("barre").style.width = e.pourcent + "%";
+        const arretee = e.etat === "erreur" || e.etat === "bloque";
         $("envoi-texte").textContent =
-          (e.etat === "pause" ? "En pause — " : "")
+          (e.etat === "pause" ? "En pause — " : arretee ? "ARRÊTÉE — " : "")
           + e.faites + " / " + e.total + " lignes  (" + e.pourcent + " %)";
-        $("envoi-reste").textContent = e.minutes_restantes > 0
+        $("envoi-reste").textContent = e.minutes_restantes > 0 && !arretee
           ? "≈ " + e.minutes_restantes + " min restantes" : "";
-        if (e.etat === "erreur" && e.message) {
-          messages("messages-lancement", [["erreur", e.message]]);
+        // Un arrêt doit se voir en grand : un petit message en bas de page
+        // laissait la machine plantée avec « Idle » pour seule explication.
+        $("bloc-arret").style.display = arretee ? "" : "none";
+        if (arretee) {
+          $("arret-message").textContent = e.message || "";
+          const j = (e.journal || []).join("\n");
+          $("arret-journal").textContent = j ? "La carte a dit :\n" + j : "";
+          $("arret-journal").style.display = j ? "" : "none";
+          $("b-relancer").style.display = e.reprise_possible ? "" : "none";
         }
-        afficherPause(e.pause);
+        afficherPause(arretee ? null : e.pause);
       } else {
         $("bloc-envoi").style.display = "none";
       }
@@ -916,6 +935,22 @@
       b.disabled = false;
       b.textContent = "Broder — machine homée";
       rafraichir();
+    }
+  });
+
+  $("b-relancer").addEventListener("click", async () => {
+    const b = $("b-relancer");
+    b.disabled = true;
+    $("arret-retour").textContent = "Recherche du point d'arrêt…";
+    try {
+      const d = await (await fetch("/api/broderie/relancer", { method:"POST" })).json();
+      $("arret-retour").textContent = !d.ok ? d.erreur
+        : d.termine ? "La carte avait déjà tout brodé : seul le dernier accusé s'était perdu."
+        : "Reprise à la ligne " + d.ligne + " sur " + d.total + ".";
+    } catch (e) {
+      $("arret-retour").textContent = "Le serveur n'a pas répondu : " + e;
+    } finally {
+      b.disabled = false;
     }
   });
 

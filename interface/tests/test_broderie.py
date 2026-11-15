@@ -431,6 +431,146 @@ def essai_premier_trou_apres_saut() -> bool:
                     (60, 0) in [(round(x, 2), round(y, 2)) for x, y in conv.piqures])
 
 
+class FauxQuiPerd(FauxAvecHold):
+    """Une carte qui suit sa position, repond a « $# », et dont la liaison
+    est imparfaite : certains « ok » se perdent en route, une ligne peut etre
+    refusee. Positions machine = travail + G54 + G92, comme sur FluidNC."""
+
+    G54 = (1.0, 2.0, 0.0)
+
+    def __init__(self, perdus=(), refus=()) -> None:
+        self.perdus, self.refus = set(perdus), set(refus)
+        self.rang = 0                    # lignes de G-code recues
+        self.executees: list = []
+        self.travail = [0.0, 0.0, 0.0]
+        self.g92 = [0.0, 0.0, 0.0]
+        self.occupee = False
+        super().__init__()
+
+    def _mpos(self):
+        return [self.travail[k] + self.G54[k] + self.g92[k] for k in range(3)]
+
+    def _ecrire(self, texte: str) -> None:
+        if texte.startswith("<"):
+            etat = ("Hold:0" if self.en_m0 else
+                    "Run" if (self._file or self.occupee) else "Idle")
+            texte = "<%s|MPos:%.3f,%.3f,%.3f|FS:0,0>" % ((etat,) + tuple(self._mpos()))
+        FauxFluidNC._ecrire(self, texte)
+
+    def _executer(self) -> None:
+        import re
+        while self._actif:
+            with self._verrou:
+                texte = self._file.popleft() if self._file else None
+                self.occupee = texte is not None
+            if texte is None:
+                time.sleep(0.002)
+                continue
+            if texte.startswith("$#"):
+                self._ecrire("[G54:%.3f,%.3f,%.3f]" % self.G54)
+                self._ecrire("[G92:%.3f,%.3f,%.3f]" % tuple(self.g92))
+                self._ecrire("ok")
+                continue
+            rang, self.rang = self.rang, self.rang + 1
+            if rang in self.refus:
+                self._ecrire("error:20")
+                continue
+            l = texte.upper().replace(" ", "")
+            if l.startswith("G92"):
+                m = re.search(r"Z(-?[\d.]+)", l)
+                if m:
+                    mz = self._mpos()[2]
+                    self.travail[2] = float(m.group(1))
+                    self.g92[2] = mz - self.G54[2] - self.travail[2]
+            elif l.startswith(("G0", "G1")):
+                for axe, v in re.findall(r"([XYZ])(-?[\d.]+)", l):
+                    self.travail["XYZ".index(axe)] = float(v)
+            self.executees.append(texte)
+            if l.startswith("M0"):
+                self.en_m0 = True
+                self._reprise.clear()
+                self._reprise.wait(timeout=30.0)
+                self.en_m0 = False
+            time.sleep(0.0005)
+            if rang not in self.perdus:
+                self._ecrire("ok")
+
+
+def _broder_jusqu_au_bout(serveur, faux, limite_s: float = 60.0) -> list:
+    """Fait tourner l'envoi en jouant l'operateur : il reprend chaque pause,
+    et relance chaque arret. Rend la liste des relances."""
+    env = serveur.machine.envoyeur
+    client = serveur.app.test_client()
+    relances = []
+    fin = time.time() + limite_s
+    while time.time() < fin:
+        a = env.avancement
+        if a.etat == "fini":
+            break
+        if faux.en_m0:
+            env.reprendre()
+        elif a.etat in ("bloque", "erreur") and not env.en_cours:
+            etat = a.etat
+            r = client.post("/api/broderie/relancer").get_json()
+            relances.append((etat, r))
+            if not r.get("ok"):
+                break
+        time.sleep(0.05)
+    return relances
+
+
+def essai_reprise() -> bool:
+    """Des « ok » perdus laissaient la machine en Idle, plantee pour une
+    heure. L'arret doit etre constate, et la broderie reprendre au point
+    exact : chaque ligne executee une fois, ni sautee ni repetee."""
+    print("\nArret en pleine broderie, puis reprise")
+    import envoi
+    import serveur
+    from envoi import Envoyeur
+    from liaison import Fluid
+
+    envoi.SURVEILLANCE_S = 0.3
+    conv = dst2gcode.DstToGcode(dst2gcode.MachineConfig(traversee_brodee_mm=0.0))
+    gcode = conv.convert_paths(dst2gcode.motif_calibration(), "cal")
+    lignes = lignes_envoyees(gcode)
+    bon = True
+
+    for nom, perdus, refus in (
+            ("ok perdus sur le cable", range(150, 158), ()),
+            ("ligne refusee par la carte", (), (200,))):
+        faux = FauxQuiPerd(perdus=perdus, refus=refus)
+        serveur.machine.fluid = Fluid(faux.port)
+        serveur.machine.fluid.ouvrir()
+        serveur.machine.envoyeur = Envoyeur(serveur.machine.fluid)
+        serveur.machine.envoyeur.demarrer(gcode)
+        relances = _broder_jusqu_au_bout(serveur, faux)
+
+        attendues = [l for k, l in enumerate(lignes) if k not in refus]
+        # (Le faux perd les « ok » d'apres un COMPTEUR de lignes recues : une
+        # ligne renvoyee a la reprise peut retomber dans la plage perdue et
+        # provoquer un second arret. C'est voulu : chacun doit etre constate.)
+        bon &= verifier("[%s] arret constate, pas d'attente muette" % nom,
+                        bool(relances) and all(e in ("bloque", "erreur")
+                                               for e, _ in relances),
+                        str([e for e, _ in relances]))
+        bon &= verifier("[%s] reprise acceptee" % nom,
+                        bool(relances) and all(r.get("ok") for _, r in relances),
+                        str([r for _, r in relances]))
+        bon &= verifier("[%s] chaque ligne une fois, dans l'ordre" % nom,
+                        faux.executees == attendues,
+                        "%d executees / %d attendues"
+                        % (len(faux.executees), len(attendues)))
+        faux.arreter()
+        serveur.machine.fluid.fermer()
+
+    # Position qui ne correspond a rien : on refuse plutot que broder de travers.
+    attendues = envoi.positions_apres(lignes)
+    bon &= verifier("position inconnue : aucune ligne designee",
+                    envoi.derniere_ligne_executee(attendues, (500.0, 500.0, 1.0),
+                                                  0, len(lignes)) is None)
+    return bon
+
+
 def main() -> int:
     tout_bon = True
     tout_bon &= essai_changement_de_couleur()
@@ -440,6 +580,7 @@ def main() -> int:
     tout_bon &= essai_calibration()
     tout_bon &= essai_estimation()
     tout_bon &= essai_bandeau_pendant_la_broderie()
+    tout_bon &= essai_reprise()
     print("\n%s" % ("Tout est bon." if tout_bon else "AU MOINS UN ECHEC."))
     return 0 if tout_bon else 1
 

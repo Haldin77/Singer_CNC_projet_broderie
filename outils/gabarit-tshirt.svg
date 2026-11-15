@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Gabarit T-shirt a l'echelle 1:1, taille M adulte (largeur de poitrine a plat 52 cm).
+  A importer dans Inkscape SOUS le motif, dans un calque ignore par Ink/Stitch.
+  Toutes les cotes sont en millimetres. Origine : point haut de l'epaule, au centre du col.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+     width="800mm" height="780mm" viewBox="-400 -10 800 780">
+
+  <g inkscape:groupmode="layer" inkscape:label="T-shirt (repere, ne pas broder)"
+     sodipodi:insensitive="true" style="opacity:0.85">
+
+    <!-- Silhouette, vue de face -->
+    <path d="M -90,0 C -60,70 60,70 90,0
+             L 230,35 L 365,165 L 300,240 L 262,212
+             L 258,720 L -258,720
+             L -262,212 L -300,240 L -365,165 L -230,35 Z"
+          fill="#e8e8e8" stroke="#9a9a9a" stroke-width="1.2"/>
+    <!-- Col -->
+    <path d="M -90,0 C -60,70 60,70 90,0" fill="none" stroke="#9a9a9a" stroke-width="6" opacity="0.5"/>
+
+    <!-- Axe central -->
+    <line x1="0" y1="55" x2="0" y2="720" stroke="#b5b5b5" stroke-width="0.6" stroke-dasharray="6 4"/>
+
+    <!-- Logo poitrine (cote coeur, a droite sur la vue de face) : 9 x 9 cm,
+         centre a 10 cm de l'axe et 19 cm sous le haut de l'epaule -->
+    <rect x="55" y="145" width="90" height="90" fill="none" stroke="#2f80ed"
+          stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="100" y="140" font-size="9" text-anchor="middle" fill="#2f80ed"
+          font-family="sans-serif">logo poitrine 9 x 9 cm</text>
+
+    <!-- Ton champ de broderie 165 x 114 mm, centre sur le logo poitrine :
+         tout ce qui depasse ne passe pas dans le cadre -->
+    <rect x="17.5" y="133" width="165" height="114" fill="none" stroke="#eb5757"
+          stroke-width="1" stroke-dasharray="8 4"/>
+    <text x="100" y="260" font-size="9" text-anchor="middle" fill="#eb5757"
+          font-family="sans-serif">champ de la brodeuse 165 x 114 mm</text>
+
+    <!-- Grand motif centre poitrine : 25 cm de large, haut a 9 cm sous le col -->
+    <rect x="-125" y="150" width="250" height="250" fill="none" stroke="#27ae60"
+          stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>
+    <text x="-120" y="413" font-size="9" fill="#27ae60"
+          font-family="sans-serif">motif centre 25 cm (ne tient pas en un seul cadre)</text>
+
+    <!-- Echelle de controle : doit mesurer exactement 100 mm dans Inkscape -->
+    <line x1="-240" y1="690" x2="-140" y2="690" stroke="#333" stroke-width="1.5"/>
+    <line x1="-240" y1="684" x2="-240" y2="696" stroke="#333" stroke-width="1.5"/>
+    <line x1="-140" y1="684" x2="-140" y2="696" stroke="#333" stroke-width="1.5"/>
+    <text x="-190" y="684" font-size="9" text-anchor="middle" fill="#333"
+          font-family="sans-serif">10 cm</text>
+
+    <text x="0" y="760" font-size="10" text-anchor="middle" fill="#777"
+          font-family="sans-serif">T-shirt M adulte, poitrine 52 cm a plat — echelle 1:1</text>
+  </g>
+</svg>
