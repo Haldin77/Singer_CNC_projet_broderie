@@ -473,6 +473,28 @@
         <button class="danger" id="b-arret">Arrêt</button>
       </div>
       <div id="messages-lancement"></div>
+
+      <!-- Reprise à un point donné : broderie arrêtée pour de bon (fil cassé
+           sans qu'on le voie, annulation, coupure). -->
+      <div class="repli">
+        <details id="bloc-reprise">
+          <summary>Reprendre une broderie à partir d'un point</summary>
+          <div class="soustitre" style="margin:10px 0">
+            Le cadre ne doit pas avoir bougé. Choisis le point : un repère rouge
+            le montre sur l'aperçu. Si le fil a cassé, reviens jusqu'au dernier
+            point vraiment brodé.
+          </div>
+          <div class="paire">
+            <label>Point n°
+              <input type="number" id="rep-point" min="2" step="1"></label>
+            <label>ou en %
+              <input type="number" id="rep-pct" min="0" max="100" step="0.1"></label>
+          </div>
+          <div class="soustitre" id="rep-info" style="margin:8px 0"></div>
+          <button class="lancer" id="b-rep" disabled>Broder à partir de ce point — machine homée</button>
+          <div id="messages-reprise"></div>
+        </details>
+      </div>
     </div>
   </div>
 
@@ -591,9 +613,12 @@
         $("bloc-envoi").style.display = "";
         $("barre").style.width = e.pourcent + "%";
         const arretee = e.etat === "erreur" || e.etat === "bloque";
+        // En points du motif entier : c'est ce qu'il faut noter pour une
+        // reprise, et ce que montre l'aperçu.
         $("envoi-texte").textContent =
           (e.etat === "pause" ? "En pause — " : arretee ? "ARRÊTÉE — " : "")
-          + e.faites + " / " + e.total + " lignes  (" + e.pourcent + " %)";
+          + "point " + e.point + " / " + e.points_total + "  ("
+          + (e.points_total ? (100 * e.point / e.points_total).toFixed(1) : 0) + " %)";
         $("envoi-reste").textContent = e.minutes_restantes > 0 && !arretee
           ? "≈ " + e.minutes_restantes + " min restantes" : "";
         // Un arrêt doit se voir en grand : un petit message en bas de page
@@ -609,6 +634,15 @@
         afficherPause(arretee ? null : e.pause);
       } else {
         $("bloc-envoi").style.display = "none";
+      }
+      // Broderie arrêtée pour de bon : on propose d'emblée la reprise, au
+      // point où elle en était. Les derniers points accusés précèdent un peu
+      // ceux réellement brodés -- le repère sur l'aperçu permet d'ajuster.
+      if (e && ["annule", "erreur", "bloque"].includes(e.etat) && e.point > 1
+          && e.points_total === totalPoints && !$("rep-point").value) {
+        $("rep-point").value = e.point;
+        $("bloc-reprise").open = true;
+        majReprise("point");
       }
     } catch (err) {
       connectee = false;
@@ -825,6 +859,10 @@
       }
       $("stats").style.display = "grid";
       $("s-points").textContent = d.stats.points;
+      totalPoints = d.stats.points;
+      // Nouveau motif : l'ancien point de reprise ne veut plus rien dire.
+      $("rep-point").value = ""; $("rep-pct").value = ""; $("rep-info").textContent = "";
+      $("b-rep").disabled = true;
       $("s-minutes").textContent = d.stats.minutes;
 
       const p = $("s-pauses");
@@ -935,6 +973,78 @@
       b.disabled = false;
       b.textContent = "Broder — machine homée";
       rafraichir();
+    }
+  });
+
+  // ---------------------------------------------------------------- reprise à un point
+  let totalPoints = 0;
+  let minuterieRepere = null;
+
+  function poserRepere(px, py) {
+    const svg = $("apercu").querySelector("svg");
+    if (!svg) return;
+    let c = svg.querySelector("#repere-reprise");
+    if (!c) {
+      c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("id", "repere-reprise");
+      c.setAttribute("r", "6");
+      c.setAttribute("fill", "none");
+      c.setAttribute("stroke", "#ef4444");
+      c.setAttribute("stroke-width", "2");
+      svg.appendChild(c);
+    }
+    c.setAttribute("cx", px);
+    c.setAttribute("cy", py);
+  }
+
+  function majReprise(source) {
+    if (source === "pct" && totalPoints) {
+      const p = parseFloat($("rep-pct").value);
+      if (!isNaN(p)) $("rep-point").value = Math.max(2, Math.round(p / 100 * totalPoints));
+    }
+    const n = parseInt($("rep-point").value, 10);
+    if (source === "point" && totalPoints && !isNaN(n)) {
+      $("rep-pct").value = (100 * n / totalPoints).toFixed(1);
+    }
+    $("b-rep").disabled = true;
+    clearTimeout(minuterieRepere);
+    if (isNaN(n)) { $("rep-info").textContent = ""; return; }
+    minuterieRepere = setTimeout(async () => {
+      try {
+        const d = await (await fetch("/api/broderie/point?n=" + n)).json();
+        if (!d.ok) { $("rep-info").textContent = d.erreur; return; }
+        if (!totalPoints) totalPoints = d.total;
+        poserRepere(d.px, d.py);
+        $("rep-info").textContent = "Point " + d.n + " sur " + d.total
+          + " — repéré en rouge sur l'aperçu (X " + d.x + ", Y " + d.y + " mm).";
+        $("b-rep").disabled = n < 2;
+      } catch (e) { $("rep-info").textContent = "Le serveur n'a pas répondu."; }
+    }, 250);
+  }
+  $("rep-point").addEventListener("input", () => majReprise("point"));
+  $("rep-pct").addEventListener("input", () => majReprise("pct"));
+
+  $("b-rep").addEventListener("click", async () => {
+    if (!connectee) {
+      messages("messages-reprise", [["erreur", "Machine non connectée."]]);
+      return;
+    }
+    const n = parseInt($("rep-point").value, 10);
+    const b = $("b-rep");
+    b.disabled = true;
+    try {
+      const d = await (await fetch("/api/broderie/reprendre-au-point", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({point:n})})).json();
+      messages("messages-reprise", d.ok
+        ? [["succes", "Reprise au point " + d.point + " : la machine va au point "
+            + "précédent et s'arrête. Remonte le fil de canette là, tiens les deux "
+            + "fils, puis Reprendre."]]
+        : [["erreur", d.erreur]]);
+    } catch (e) {
+      messages("messages-reprise", [["erreur", "Le serveur n'a pas répondu : " + e]]);
+    } finally {
+      b.disabled = false;
     }
   });
 

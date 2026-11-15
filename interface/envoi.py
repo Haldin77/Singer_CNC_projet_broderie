@@ -77,6 +77,68 @@ def positions_apres(lignes: list) -> list | None:
     return sortie
 
 
+def programme_de_reprise(gcode: str, point: int,
+                         decalage_phase_deg: float) -> tuple:
+    """Le programme qui reprend une broderie AU point n° `point` (le 1er = 1).
+
+    Pour une broderie interrompue pour de bon -- fil casse sans qu'on le voie,
+    annulation, coupure : la carte a perdu sa position, on refait le homing
+    et l'on repart d'un point choisi sur l'apercu. Le cadre ne doit pas avoir
+    bouge dans la machine.
+
+    En tete, ce que le debut du fichier aurait etabli :
+      - unites et modes, et l'AVANCE F, qui n'est ecrite qu'a ses
+        changements : la ligne reprise n'en porte souvent pas, et une carte
+        qui sort d'un reset la refuserait (« error:22 ») ;
+      - Z : apres le homing, l'aiguille est au capteur, quelques degres apres
+        le point mort haut. On le declare a la numerotation du fichier a cet
+        endroit, pour que la suite tourne exactement en phase ;
+      - le cadre amene la ou le point precedent a ete pique, puis une pause
+        pour remonter le fil de canette -- comme au tout premier point.
+
+    Rend (lignes, rang_dans_le_programme_d_origine, position_xy).
+    """
+    lignes = [l.split(";")[0].strip() for l in gcode.splitlines()]
+    lignes = [l for l in lignes if l]
+    piqures = [i for i, l in enumerate(lignes) if est_piqure(l)]
+    if not 2 <= point <= len(piqures):
+        raise ValueError("point hors du motif (2 a %d)" % len(piqures))
+    debut = piqures[point - 2] + 1
+    etats = positions_apres(lignes)
+    if etats is None:
+        raise ValueError("motif en coordonnees relatives")
+    x, y, z = etats[debut - 1]
+
+    avance = None
+    for l in reversed(lignes[:debut]):
+        m = re.search(r"F(-?[\d.]+)", l.upper())
+        if m:
+            avance = m.group(1)
+            break
+
+    def num(v: float) -> str:
+        s = ("%.2f" % v).rstrip("0").rstrip(".")
+        return s if s not in ("", "-0") else "0"
+
+    z_carte = z - decalage_phase_deg
+    entete = ["G21", "G90", "G94", "G92Z" + num(z_carte)]
+    if avance:
+        entete.append("F" + avance)
+    entete += ["G0X%sY%s" % (num(x), num(y)), "M0"]
+
+    # Le premier point repris part de l'aiguille au capteur, un peu apres le
+    # point mort haut : ses premieres cibles Z seraient EN DESSOUS, l'arbre
+    # reculerait. On les ramene a la position reelle.
+    suite = lignes[debut:]
+    for k, l in enumerate(suite):
+        if est_piqure(l) or not l.upper().startswith("G1"):
+            break
+        m = re.search(r"Z(-?[\d.]+)", l)
+        if m and float(m.group(1)) < z_carte:
+            suite[k] = l[:m.start()] + "Z" + num(z_carte) + l[m.end():]
+    return entete + suite, debut, (x, y)
+
+
 def derniere_ligne_executee(attendues: list, position: tuple,
                             debut: int, fin: int) -> int | None:
     """La derniere ligne de [debut, fin) qui laisse la machine en `position`.
@@ -106,6 +168,9 @@ class Avancement:
     # du temps de couture, pas du temps ecoule.
     points_total: int = 0
     points_faits: int = 0
+    # Reprise a un point donne : les points deja brodes avant ce programme,
+    # pour afficher la position dans le motif ENTIER.
+    points_avant: int = 0
     temps_pause: float = 0.0    # cumul des attentes sur M0 et pauses manuelles
     pause_depuis: float = 0.0   # debut de l'attente sur M0 en cours, 0 sinon
     pause_manuelle_depuis: float = 0.0   # idem, pause demandee a l'interface
@@ -163,7 +228,7 @@ class Envoyeur:
         """Nombre de lignes du dernier envoi qui n'ont pas ete confirmees."""
         return max(0, self.avancement.total - self.avancement.confirmees)
 
-    def demarrer(self, gcode: str) -> bool:
+    def demarrer(self, gcode: str, points_avant: int = 0) -> bool:
         if self.en_cours:
             return False
 
@@ -189,7 +254,8 @@ class Envoyeur:
         self._m0 = [l.upper().startswith("M0") for l in self._lignes]
         self.avancement = Avancement(total=len(self._lignes), etat="envoi",
                                      demarre_a=time.time(),
-                                     points_total=sum(self._piqures))
+                                     points_total=sum(self._piqures),
+                                     points_avant=points_avant)
         self._pause.clear()
         self._stop.clear()
         self._fil = threading.Thread(target=self._boucle, daemon=True)

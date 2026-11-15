@@ -316,6 +316,11 @@ class DstToGcode:
         self.cfg = cfg
         self.stats = Stats()
         self.z = 0.0          # angle cumule de l'axe Z, en degres
+        # Z REEL de la carte, la ou il differe de self.z : apres le G92 de
+        # phase, l'aiguille est au capteur, quelques degres APRES le point mort
+        # haut. Le premier point ne doit pas viser en dessous -- l'arbre
+        # tournerait a l'envers.
+        self._z_carte = 0.0
         self.x = 0.0
         self.y = 0.0
         self.lines: list = []
@@ -415,6 +420,7 @@ class DstToGcode:
         self.comment("; recalage : l'aimant est a %.1f deg du point mort haut"
                      % d)
         self.emit("G92 Z%s" % self.num(-d, 2))
+        self._z_carte = -d
 
     def comment(self, line: str) -> None:
         """Commentaire : conserve en mode lisible, supprime en mode compact."""
@@ -493,26 +499,27 @@ class DstToGcode:
         if math.hypot(mx - sx, my - sy) < 0.05:
             n = 1
         z0 = self.z
+        z_plancher = self._z_carte
         for k in range(1, n + 1):
             t = k / n
             s = t * t * (3.0 - 2.0 * t)                # smoothstep : 0 -> 1
             px, py = sx + (mx - sx) * s, sy + (my - sy) * s
+            zk = max(z0 + bouge * t, z_plancher)
             if self.relatif:
                 dx, dy = self._delta(px, py)
                 self.emit("G1%sZ%s%s" % (self._mots_xy(dx, dy),
                                          self.num(bouge / n, 1), self.mot_f(f)))
             elif self.cfg.compact:
                 self.emit("G1X%sY%sZ%s%s" % (self.num(px, 2), self.num(py, 2),
-                                             self.num(z0 + bouge * t, 1),
-                                             self.mot_f(f)))
+                                             self.num(zk, 1), self.mot_f(f)))
             else:
-                self.emit("G1 X%.4f Y%.4f Z%.3f F%.0f"
-                          % (px, py, z0 + bouge * t, f))
+                self.emit("G1 X%.4f Y%.4f Z%.3f F%.0f" % (px, py, zk, f))
         self.z = z0 + bouge
         self._machine = (mx, my)
 
         # Phase 2 : penetration puis remontee. XY immobile.
         self.z += pique
+        self._z_carte = self.z
         if self.relatif:
             self.emit("G1Z%s%s" % (self.num(pique, 1), self.mot_f(f)))
         elif self.cfg.compact:
@@ -636,6 +643,7 @@ class DstToGcode:
             self.emit("G92 Z0" if self.cfg.compact
                       else "G92 Z0 ; remise a zero de l'angle cumule (precision float32)")
             self.z = 0.0
+            self._z_carte = 0.0
             self.stats.z_resets += 1
 
     def servo(self, deg: float) -> None:
@@ -1019,6 +1027,7 @@ class DstToGcode:
                     # remise a zero (inutile en relatif).
                     self.emit("G92 Z0")
                     self.z = 0.0
+                    self._z_carte = 0.0
                     self.stats.z_resets += 1
 
                 # 3. Le nouveau fil n'est accroche nulle part. Le prochain

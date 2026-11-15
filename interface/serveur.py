@@ -41,7 +41,7 @@ except ImportError as e:
 
 from couture_pedale import CoutureAPedale, cadence_depuis_pedale  # noqa: E402
 from envoi import (Envoyeur, derniere_ligne_executee,              # noqa: E402
-                   positions_apres)
+                   positions_apres, programme_de_reprise)
 from liaison import (Fluid, Pedale, deviner, identifier_tous,     # noqa: E402
                      lister_ports)
 
@@ -433,6 +433,10 @@ def api_etat() -> object:
             "message": a.message,
             "reprise_possible": (a.etat in ("bloque", "erreur")
                                  and not machine.envoyeur.en_cours),
+            # En POINTS du motif entier : c'est ce que l'on retrouve sur
+            # l'apercu, et ce qu'il faut pour reprendre a un point donne.
+            "point": a.points_avant + a.points_faits,
+            "points_total": a.points_avant + a.points_total,
         }
         # Apres un arret, ce que la carte a dit en dernier : un ALARM, un
         # message de FluidNC, ou des caracteres brouilles -- la trace d'un
@@ -615,8 +619,11 @@ def api_convertir() -> object:
     chemin.write_text(gcode, encoding="utf-8")
 
     motif_courant.clear()
+    # Les pauses aussi : sans elles, le bandeau qui dit pourquoi la machine
+    # s'arrete restait muet sur les motifs venus d'une image.
     motif_courant.update({"gcode": gcode, "cadence": cadence,
-                          "chemin": str(chemin)})
+                          "chemin": str(chemin), "pauses": conv.pauses,
+                          "piqures": conv.piqures})
 
     stats = conv.stats
     avertissements = list(resultat.avertissements)
@@ -685,7 +692,10 @@ def _pause_courante(lignes_faites: int) -> dict | None:
     d'une zone, le dernier M0 passe : on aurait annonce un changement de
     couleur fini depuis longtemps. Hors d'un M0, rien n'est annonce.
     """
-    for p in motif_courant.get("pauses", []):
+    # Les pauses du programme EN COURS d'envoi : celles du motif, ou leur
+    # version renumerotee s'il s'agit d'une reprise a un point donne.
+    pauses = motif_courant.get("pauses_envoi", motif_courant.get("pauses", []))
+    for p in pauses:
         if p["ligne"] == lignes_faites:
             return p
     return None
@@ -875,7 +885,7 @@ def _convertir_broderie(fichier) -> object:
     motif_courant.clear()
     motif_courant.update({"gcode": gcode, "cadence": cadence,
                           "chemin": str(chemin), "pauses": conv.pauses,
-                          "blocs": blocs})
+                          "blocs": blocs, "piqures": conv.piqures})
 
     # Les zones surchargees se cherchent sur ce que la machine piquera
     # VRAIMENT : le fichier source, plus nos noeuds et nos traversees, moins
@@ -1011,7 +1021,8 @@ def api_calibration_motif() -> object:
     chemin.write_text(gcode, encoding="utf-8")
     motif_courant.clear()
     motif_courant.update({"gcode": gcode, "cadence": cadence,
-                          "chemin": str(chemin), "pauses": conv.pauses})
+                          "chemin": str(chemin), "pauses": conv.pauses,
+                          "piqures": conv.piqures})
 
     apercu = SimpleNamespace(trajets=[image2points.Trajet(points=t, role="bourdon")
                                       for t in trajets])
@@ -1118,6 +1129,22 @@ def api_lancer() -> object:
     Plus de televersement : le fichier ne quitte jamais le PC. Sa taille n'a
     donc aucune importance.
     """
+    faites: list = []
+    if (r := _preparer_lancement(faites)):
+        return r
+    motif_courant["pauses_envoi"] = motif_courant.get("pauses", [])
+    machine.envoyeur.demarrer(motif_courant["gcode"])
+    faites.append("Envoi du motif demarre")
+    return jsonify({"ok": True, "faites": faites})
+
+
+def _preparer_lancement(faites: list):
+    """Verifications et mise en place communes au lancement et a la reprise.
+
+    L'origine est posee au MEME endroit machine a chaque fois -- le centre du
+    champ. Une reprise apres un homing retrouve donc exactement le repere de
+    la broderie d'origine, tant que le cadre n'a pas bouge.
+    """
     if (r := exige_connexion()):
         return r
     if not motif_courant:
@@ -1131,8 +1158,6 @@ def api_lancer() -> object:
             "ok": False,
             "erreur": "La machine est en « %s ». Fais le homing d'abord."
                       % etat}), 409
-
-    faites = []
     for libelle, cmd in (
         ("Deplacement au centre du cadre",
          "G90 G53 G0 X%.3f Y%.3f" % (CENTRE_X, CENTRE_Y)),
@@ -1144,10 +1169,64 @@ def api_lancer() -> object:
                             "erreur": "%s : %s" % (libelle, rep.texte),
                             "faites": faites}), 502
         faites.append(libelle)
+    return None
 
-    machine.envoyeur.demarrer(motif_courant["gcode"])
-    faites.append("Envoi du motif demarre")
-    return jsonify({"ok": True, "faites": faites})
+
+@app.get("/api/broderie/point")
+def api_point() -> object:
+    """Ou tombe le point n° n : en mm, et sur l'apercu."""
+    piqures = motif_courant.get("piqures") or []
+    try:
+        n = int(request.args.get("n", "0"))
+    except ValueError:
+        n = 0
+    if not 1 <= n <= len(piqures):
+        return jsonify({"ok": False, "total": len(piqures),
+                        "erreur": "Point hors du motif (1 a %d)." % len(piqures)}), 400
+    x, y = piqures[n - 1]
+    marge, ech = 6, 4.0                     # les memes que image2points.apercu_svg
+    return jsonify({"ok": True, "n": n, "total": len(piqures),
+                    "x": round(x, 2), "y": round(y, 2),
+                    "px": round(marge + (x + CADRE_X / 2) * ech, 1),
+                    "py": round(marge + (CADRE_Y / 2 - y) * ech, 1)})
+
+
+@app.post("/api/broderie/reprendre-au-point")
+def api_reprendre_au_point() -> object:
+    """Brode le motif courant a partir du point n° « point ».
+
+    Pour une broderie arretee pour de bon : fil casse sans qu'on le voie,
+    annulation, coupure. Homing fait, cadre jamais sorti de la machine.
+    """
+    try:
+        point = int((request.get_json(silent=True) or {}).get("point", 0))
+    except (TypeError, ValueError):
+        point = 0
+    if point <= 1:
+        return jsonify({"ok": False, "erreur": "Pour le point 1, lance simplement "
+                        "la broderie depuis le debut."}), 400
+    try:
+        lignes, debut, (x, y) = programme_de_reprise(
+            motif_courant.get("gcode", ""), point, DECALAGE_PHASE_Z_DEG)
+    except ValueError as e:
+        return jsonify({"ok": False, "erreur": "Reprise impossible : %s." % e}), 400
+
+    faites: list = []
+    if (r := _preparer_lancement(faites)):
+        return r
+
+    # Les pauses du motif, renumerotees pour ce programme, plus celle de la
+    # preparation du fil au point de reprise.
+    entete = len(lignes) - (len([l for l in motif_courant["gcode"].splitlines()
+                                 if l.split(";")[0].strip()]) - debut)
+    pauses = [{"ligne": entete - 1, "genre": "depart", "detail": "point %d" % point}]
+    pauses += [dict(p, ligne=p["ligne"] - debut + entete)
+               for p in motif_courant.get("pauses", []) if p["ligne"] >= debut]
+    motif_courant["pauses_envoi"] = pauses
+
+    machine.envoyeur.demarrer("\n".join(lignes), points_avant=point - 1)
+    faites.append("Reprise au point %d" % point)
+    return jsonify({"ok": True, "faites": faites, "point": point})
 
 
 RE_OFFSET = re.compile(r"\[(G54|G92):([-\d.]+),([-\d.]+),([-\d.]+)")

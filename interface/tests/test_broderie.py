@@ -445,6 +445,8 @@ class FauxQuiPerd(FauxAvecHold):
         self.travail = [0.0, 0.0, 0.0]
         self.g92 = [0.0, 0.0, 0.0]
         self.occupee = False
+        self.piqures: list = []      # position de travail a chaque piqure
+        self.reculs: list = []       # l'arbre a-t-il tourne a l'envers ?
         super().__init__()
 
     def _mpos(self):
@@ -482,9 +484,15 @@ class FauxQuiPerd(FauxAvecHold):
                     mz = self._mpos()[2]
                     self.travail[2] = float(m.group(1))
                     self.g92[2] = mz - self.G54[2] - self.travail[2]
-            elif l.startswith(("G0", "G1")):
+            elif l.startswith(("G0", "G1")) and not l.startswith("G10"):
+                z_avant = self.travail[2]
                 for axe, v in re.findall(r"([XYZ])(-?[\d.]+)", l):
                     self.travail["XYZ".index(axe)] = float(v)
+                if self.travail[2] < z_avant - 1e-9:
+                    self.reculs.append((z_avant, self.travail[2]))
+                if l.startswith("G1") and "Z" in l and "X" not in l and "Y" not in l:
+                    self.piqures.append((round(self.travail[0], 2),
+                                         round(self.travail[1], 2)))
             self.executees.append(texte)
             if l.startswith("M0"):
                 self.en_m0 = True
@@ -604,6 +612,68 @@ def essai_cadence() -> bool:
     return bon
 
 
+def essai_reprise_au_point() -> bool:
+    """Broderie arretee pour de bon : on reprend au point n° N choisi sur
+    l'apercu. La suite doit tomber EXACTEMENT sur les points N, N+1... du
+    motif d'origine, l'arbre ne doit jamais tourner a l'envers, et chaque
+    pause doit etre annoncee pour ce qu'elle est."""
+    print("\nReprise a un point choisi")
+    import serveur
+    from envoi import Envoyeur
+    from liaison import Fluid
+
+    # Reference : le motif entier, brode d'une traite.
+    tampon = io.BytesIO()
+    pe.write_pes(deux_couleurs(60), tampon)
+    tampon.seek(0)
+    client = serveur.app.test_client()
+    client.post("/api/broderie/convertir", data={"image": (tampon, "m.pes")},
+                content_type="multipart/form-data")
+    reference = [(round(x, 2), round(y, 2))
+                 for x, y in [e for e in rejouer(serveur.motif_courant["gcode"])
+                              if e != "M0"]]
+
+    N = 5
+    faux = FauxQuiPerd()
+    serveur.machine.fluid = Fluid(faux.port)
+    serveur.machine.fluid.ouvrir()
+    serveur.machine.envoyeur = Envoyeur(serveur.machine.fluid)
+    r = client.post("/api/broderie/reprendre-au-point", json={"point": N}).get_json()
+    bon = verifier("reprise acceptee", bool(r.get("ok")), str(r))
+
+    vus, fin = [], time.time() + 30
+    env = serveur.machine.envoyeur
+    while time.time() < fin and env.avancement.etat != "fini":
+        if faux.en_m0:
+            time.sleep(0.6)
+            e = client.get("/api/etat").get_json()
+            vus.append(((e.get("envoi") or {}).get("pause") or {}).get("genre"))
+            # Deux M0 peuvent se suivre a une ligne d'ecart (fin-pied, puis
+            # fin-cadre) : on attend que la carte ait AVANCE, pas seulement
+            # qu'elle ait quitte la pause.
+            deja = len(faux.executees)
+            env.reprendre()
+            while len(faux.executees) == deja and time.time() < fin:
+                time.sleep(0.01)
+        time.sleep(0.02)
+
+    bon &= verifier("les points repris sont ceux du motif, a partir du n° %d" % N,
+                    faux.piqures == reference[N - 1:],
+                    "%d points repris, %d attendus" % (len(faux.piqures),
+                                                       len(reference) - N + 1))
+    bon &= verifier("l'arbre ne tourne jamais a l'envers", not faux.reculs,
+                    str(faux.reculs[:3]))
+    bon &= verifier("chaque pause annoncee pour ce qu'elle est",
+                    vus == ["depart", "couleur", "fin-pied", "fin-cadre"], str(vus))
+    e = client.get("/api/etat").get_json()["envoi"]
+    bon &= verifier("avancement compte dans le motif entier",
+                    e["point"] == e["points_total"] == len(reference),
+                    "%s / %s" % (e["point"], e["points_total"]))
+    faux.arreter()
+    serveur.machine.fluid.fermer()
+    return bon
+
+
 def main() -> int:
     tout_bon = True
     tout_bon &= essai_changement_de_couleur()
@@ -615,6 +685,7 @@ def main() -> int:
     tout_bon &= essai_estimation()
     tout_bon &= essai_bandeau_pendant_la_broderie()
     tout_bon &= essai_reprise()
+    tout_bon &= essai_reprise_au_point()
     print("\n%s" % ("Tout est bon." if tout_bon else "AU MOINS UN ECHEC."))
     return 0 if tout_bon else 1
 
