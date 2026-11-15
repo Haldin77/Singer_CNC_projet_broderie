@@ -84,6 +84,25 @@ class MachineConfig:
     # 120 laisse une soixantaine de degres de marge avant le contact.
     deg_deplacement: float = 120.0
 
+    # Nombre de sous-segments sur lesquels s'etale le deplacement XY d'un
+    # point, en courbe en S. 1 = un seul segment, comme avant.
+    #
+    # POURQUOI : le planificateur de FluidNC enchaine les blocs sans s'arreter
+    # tant que la direction change peu, et sinon il freine -- c'est la
+    # « deviation de jonction » (0,01 mm par defaut). Or un point s'ecrivait
+    # en deux blocs : XY+Z, puis Z seul. A la jonction, le cadre devait
+    # passer d'un coup de ~20 mm/s a l'arret : le planificateur freinait
+    # TOUT, l'arbre compris, deux fois par point. Simule sur un motif reel de
+    # 6400 points : 162 points/min au lieu des 200 demandes.
+    #
+    # En courbe en S, le cadre accelere et ralentit par petites marches
+    # pendant que Z tourne a vitesse constante : aucune jonction brutale, le
+    # planificateur ne freine plus. Meme motif : 199 points/min, avec des
+    # a-coups du cadre deux fois plus petits qu'avant -- ce qui menage aussi
+    # la barre qui flechit. Le prix : plus de lignes, sans consequence depuis
+    # que le G-code part du PC au fil de l'eau.
+    lissage_xy: int = 8
+
     # ---- Points d'arret ---------------------------------------------------
     # Avant chaque saut et a la fin du motif, on bloque le fil par un petit
     # zigzag. La broderie ne se defait alors pas quand on coupe les fils
@@ -329,6 +348,9 @@ class DstToGcode:
         # direction du dernier mouvement non nul (vecteur unitaire).
         self._cible = (0.0, 0.0)
         self._sens = (0.0, 0.0)
+        # Derniere position XY COMMANDEE (compensation comprise) : point de
+        # depart du lissage du deplacement suivant.
+        self._machine = (0.0, 0.0)
         # Derniere position EMISE, arrondie au centieme : c'est la reference
         # des deltas du mode relatif.
         self._ex = 0.0
@@ -463,25 +485,39 @@ class DstToGcode:
         pique = 360.0 - bouge                      # descente + remontee
         mx, my = self.vers_machine(x, y)
 
+        # Phase 1 : l'aiguille est haute, le cadre se deplace -- en courbe en
+        # S sur n sous-segments, Z avancant d'un meme pas a chacun (voir
+        # MachineConfig.lissage_xy). Un deplacement infime reste d'un bloc.
+        sx, sy = self._machine
+        n = max(1, int(self.cfg.lissage_xy))
+        if math.hypot(mx - sx, my - sy) < 0.05:
+            n = 1
+        z0 = self.z
+        for k in range(1, n + 1):
+            t = k / n
+            s = t * t * (3.0 - 2.0 * t)                # smoothstep : 0 -> 1
+            px, py = sx + (mx - sx) * s, sy + (my - sy) * s
+            if self.relatif:
+                dx, dy = self._delta(px, py)
+                self.emit("G1%sZ%s%s" % (self._mots_xy(dx, dy),
+                                         self.num(bouge / n, 1), self.mot_f(f)))
+            elif self.cfg.compact:
+                self.emit("G1X%sY%sZ%s%s" % (self.num(px, 2), self.num(py, 2),
+                                             self.num(z0 + bouge * t, 1),
+                                             self.mot_f(f)))
+            else:
+                self.emit("G1 X%.4f Y%.4f Z%.3f F%.0f"
+                          % (px, py, z0 + bouge * t, f))
+        self.z = z0 + bouge
+        self._machine = (mx, my)
+
+        # Phase 2 : penetration puis remontee. XY immobile.
+        self.z += pique
         if self.relatif:
-            # Phase 1 : l'aiguille est haute, le cadre se deplace.
-            dx, dy = self._delta(mx, my)
-            self.z += bouge
-            self.emit("G1%sZ%s%s" % (self._mots_xy(dx, dy),
-                                     self.num(bouge, 1), self.mot_f(f)))
-            # Phase 2 : penetration puis remontee. XY immobile.
-            self.z += pique
             self.emit("G1Z%s%s" % (self.num(pique, 1), self.mot_f(f)))
         elif self.cfg.compact:
-            self.z += bouge
-            self.emit("G1X%sY%sZ%s%s" % (self.num(mx, 2), self.num(my, 2),
-                                         self.num(self.z, 1), self.mot_f(f)))
-            self.z += pique
             self.emit("G1Z%s%s" % (self.num(self.z, 1), self.mot_f(f)))
         else:
-            self.z += bouge
-            self.emit("G1 X%.4f Y%.4f Z%.3f F%.0f" % (mx, my, self.z, f))
-            self.z += pique
             self.emit("G1 Z%.3f F%.0f" % (self.z, f))
 
         if self.z > self.stats.max_z:
@@ -680,6 +716,7 @@ class DstToGcode:
             self.stats.pauses_pied += 1
 
         mx, my = self.vers_machine(x, y)
+        self._machine = (mx, my)
         if self.relatif:
             dx, dy = self._delta(mx, my)
             mots = self._mots_xy(dx, dy)

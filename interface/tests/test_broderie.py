@@ -571,12 +571,46 @@ def essai_reprise() -> bool:
     return bon
 
 
+def essai_cadence() -> bool:
+    """Le lissage du deplacement XY doit tenir la cadence demandee, sans
+    deplacer un seul point."""
+    print("\nCadence reellement tenue")
+    sys.path.insert(0, str(ICI.parent.parent / "outils"))
+    import simulateur_cadence as sim
+
+    # Un satin de 2,5 mm : le cas courant des motifs Ink/Stitch.
+    p = pe.EmbPattern()
+    for i in range(400):
+        p.add_stitch_absolute(pe.STITCH, (25 if i % 2 else 0), i * 4)
+    p.end()
+    p.move_center_to_origin()
+
+    resultats, piqures = {}, {}
+    for lissage in (1, 8):
+        conv = dst2gcode.DstToGcode(dst2gcode.MachineConfig(
+            stitches_per_minute=200, lissage_xy=lissage))
+        gcode = conv.convert(p, "satin")
+        _, blocs = sim.simuler(gcode, sim.Machine())
+        t = sum(dt for b, dt in blocs if b["z"] > 0)
+        resultats[lissage] = conv.stats.stitches / t
+        piqures[lissage] = [e for e in rejouer(gcode) if e != "M0"]
+
+    bon = verifier("sans lissage, la cadence s'effondre (constat)",
+                   resultats[1] < 185, "%.0f pts/min" % resultats[1])
+    bon &= verifier("avec lissage, 200 pts/min tenus a 3 % pres",
+                    resultats[8] >= 194, "%.0f pts/min" % resultats[8])
+    bon &= verifier("les piqures n'ont pas bouge d'un centieme",
+                    piqures[1] == piqures[8], "%d piqures" % len(piqures[8]))
+    return bon
+
+
 def main() -> int:
     tout_bon = True
     tout_bon &= essai_changement_de_couleur()
     tout_bon &= essai_rangs_des_pauses()
     tout_bon &= essai_noeuds()
     tout_bon &= essai_premier_trou_apres_saut()
+    tout_bon &= essai_cadence()
     tout_bon &= essai_calibration()
     tout_bon &= essai_estimation()
     tout_bon &= essai_bandeau_pendant_la_broderie()
