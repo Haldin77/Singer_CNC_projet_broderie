@@ -1,5 +1,7 @@
 # Tenir dans la mémoire de l'ESP32
 
+> En partie dépassé : écrit avant l'envoi en direct par USB. Le [README](../README.md) fait foi.
+
 La carte ne dispose que d'une petite partition de fichiers, partagée avec l'interface WebUI. C'est la contrainte dominante de tout le projet côté logiciel.
 
 ## L'état réel de la carte

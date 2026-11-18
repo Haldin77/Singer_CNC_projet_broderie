@@ -1,5 +1,7 @@
 # Interface broderie
 
+> En partie dépassé : écrit avant l'envoi en direct par USB. Le [README](../README.md) fait foi.
+
 Charger une image, la voir se transformer en points, l'envoyer à la machine et la broder — sans taper une seule commande.
 
 ## Lancer

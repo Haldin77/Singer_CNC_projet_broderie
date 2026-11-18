@@ -1075,7 +1075,8 @@ def points_chauds(positions: list, taille_cellule_mm: float = 1.0,
 
 def apercu_svg(res: Resultat, cadre_x: float, cadre_y: float,
                chauds: list | None = None, fils: list | None = None,
-               traversee_brodee_mm: float = 0.0) -> str:
+               traversee_brodee_mm: float = 0.0,
+               bati: tuple | None = None) -> str:
     """Trace des points, en SVG. Le fil en trait plein, les sauts en pointille.
 
     `fils` : couleurs reelles des blocs d'un motif deja numerise, dans
@@ -1103,6 +1104,14 @@ def apercu_svg(res: Resultat, cadre_x: float, cadre_y: float,
     out.append('<rect x="%d" y="%d" width="%.1f" height="%.1f" fill="#0b1220" '
                'stroke="#334155" stroke-width="1"/>'
                % (marge, marge, cadre_x * ech, cadre_y * ech))
+
+    # Bati : le rectangle de grands points brode en premier, a retirer apres.
+    if bati:
+        bx0, by0 = px((bati[0], bati[3]))
+        bx1, by1 = px((bati[2], bati[1]))
+        out.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" '
+                   'fill="none" stroke="#94a3b8" stroke-width="0.8" '
+                   'stroke-dasharray="6 3"/>' % (bx0, by0, bx1 - bx0, by1 - by0))
 
     # Sauts -- et traversees brodees, qui leur ressemblent geometriquement
     # (meme trou entre deux trajets) mais que la machine va coudre plutot

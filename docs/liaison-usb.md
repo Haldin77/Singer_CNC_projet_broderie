@@ -1,5 +1,7 @@
 # Liaison USB et pédale progressive
 
+> En partie dépassé : écrit avant l'envoi en direct par USB. Le [README](../README.md) fait foi.
+
 Le WiFi sort de la boucle de commande. Le PC pilote la machine par un câble USB, et lit la pédale par un second.
 
 ```

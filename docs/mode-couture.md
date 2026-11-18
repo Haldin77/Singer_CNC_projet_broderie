@@ -1,5 +1,7 @@
 # Mode couture
 
+> En partie dépassé : écrit avant l'envoi en direct par USB. Le [README](../README.md) fait foi.
+
 Utiliser la machine comme une machine à coudre ordinaire : seul l'arbre principal tourne, le cadre reste parqué.
 
 ## Installation — une seule fois

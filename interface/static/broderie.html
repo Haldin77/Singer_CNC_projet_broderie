@@ -300,6 +300,11 @@
               <span>120 — presque jamais</span>
             </div>
           </div>
+          <div class="champ case">
+            <input type="checkbox" id="bati">
+            <label for="bati" style="margin:0">Bâti autour du motif — tient le tissu
+              sur l'entoilage, pour les t-shirts et tissus souples (à retirer après)</label>
+          </div>
           <div class="champ">
             <label for="largeur_trait">
               Traiter en bourdon les traits jusqu'à <span class="v" id="v-largeur_trait">2.5</span> mm
@@ -805,6 +810,7 @@
     form.append("liaison", $("liaison").value);
     form.append("traversee", $("traversee").value);
     form.append("pause_saut", $("pause_saut").value);
+    form.append("bati", $("bati").checked ? "1" : "0");
     form.append("largeur_trait", $("largeur_trait").value);
     form.append("densite_bourdon", $("densite_bourdon").value);
     form.append("compensation", $("compensation").value);
@@ -914,6 +920,7 @@
     form.append("corrige", corrige ? "1" : "0");
     form.append("cadence", $("cadence").value);
     form.append("pause_saut", $("pause_saut").value);
+    form.append("bati", $("bati").checked ? "1" : "0");
     try {
       const d = await (await fetch("/api/calibration/motif",
                                    { method:"POST", body:form })).json();

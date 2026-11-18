@@ -83,6 +83,23 @@ DOSSIER_SORTIE = Path(__file__).resolve().parent.parent / "gcode"
 # Ignore par git (.gitignore) : le fichier nait sur le serveur. Versionne,
 # un exemplaire venu du PC ecraserait la mesure du serveur -- ou bloquerait
 # le « git pull » du redeploiement automatique.
+# Ecart entre le bati et le motif, en mm, quand la case est cochee.
+BATI_MARGE_MM = 6.0
+
+
+def _notes_bati(conv) -> list:
+    if conv.bati:
+        x0, y0, x1, y1 = conv.bati
+        return ["Bati brode en premier : rectangle de %.0f x %.0f mm autour du "
+                "motif (pointilles gris sur l'apercu). Il tient le tissu sur "
+                "l'entoilage ; retire-le a la fin en tirant le fil."
+                % (x1 - x0, y1 - y0)]
+    if conv.cfg.bati_marge_mm > 0:
+        return ["Pas de bati : le motif touche presque le bord du cadre, il "
+                "n'y a pas la place de l'entourer."]
+    return []
+
+
 FICHIER_CALIBRATION = DOSSIER_SORTIE / "reglages_machine.json"
 CALIBRATION_NEUTRE = {"echelle_x": 1.0, "echelle_y": 1.0,
                       "flexion_x_mm": 0.0, "flexion_y_mm": 0.0}
@@ -620,6 +637,7 @@ def api_convertir() -> object:
         stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
         traversee_brodee_mm=traversee,
         pause_saut_mm=_flottant("pause_saut", 20.0),
+        bati_marge_mm=BATI_MARGE_MM if request.form.get("bati") == "1" else 0.0,
         decalage_phase_deg=DECALAGE_PHASE_Z_DEG, **calibration())
     conv = dst2gcode.DstToGcode(cfg)
     gcode = conv.convert_paths([t.points for t in resultat.trajets],
@@ -637,6 +655,7 @@ def api_convertir() -> object:
 
     stats = conv.stats
     avertissements = list(resultat.avertissements)
+    avertissements += _notes_bati(conv)
 
     # Sur les piqures que la machine fera vraiment -- noeuds et traversees
     # compris --, pas sur les trajets d'avant conversion.
@@ -657,7 +676,8 @@ def api_convertir() -> object:
     return jsonify({
         "ok": True,
         "apercu": image2points.apercu_svg(resultat, CADRE_X, CADRE_Y, chauds,
-                                          traversee_brodee_mm=traversee),
+                                          traversee_brodee_mm=traversee,
+                                          bati=conv.bati),
         "points_chauds": len(chauds),
         "avertissements": avertissements,
         "auto": notes_auto,
@@ -866,6 +886,7 @@ def _convertir_broderie(fichier) -> object:
         stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
         traversee_brodee_mm=traversee,
         pause_saut_mm=_flottant("pause_saut", 20.0),
+        bati_marge_mm=BATI_MARGE_MM if request.form.get("bati") == "1" else 0.0,
         decalage_phase_deg=DECALAGE_PHASE_Z_DEG, **calibration())
     conv = dst2gcode.DstToGcode(cfg)
     gcode = conv.convert(motif, Path(fichier.filename).name)
@@ -906,6 +927,7 @@ def _convertir_broderie(fichier) -> object:
     avertissements = ["Fichier deja numerise : les points viennent du "
                       "logiciel d'origine, aucun reglage de conversion ne "
                       "s'applique."]
+    avertissements += _notes_bati(conv)
 
     if len(blocs) > 1 and not couleurs_connues:
         avertissements.append(
@@ -963,7 +985,7 @@ def _convertir_broderie(fichier) -> object:
         "apercu": image2points.apercu_svg(
             apercu, CADRE_X, CADRE_Y, chauds,
             [b["couleur"] for b in blocs] if couleurs_connues else None,
-            traversee_brodee_mm=traversee),
+            traversee_brodee_mm=traversee, bati=conv.bati),
         "points_chauds": len(chauds),
         "couleurs": blocs,
         "couleurs_connues": couleurs_connues,

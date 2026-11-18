@@ -726,6 +726,53 @@ def essai_liaison_brouillee() -> bool:
     return bon
 
 
+def essai_bati() -> bool:
+    """Le bati entoure le motif, se brode en premier, sans noeud (il doit
+    s'enlever d'une traction), et le motif qui suit est inchange."""
+    print("\nBati autour du motif")
+    motif = deux_couleurs(15)
+    sans = dst2gcode.DstToGcode(dst2gcode.MachineConfig())
+    g_sans = sans.convert(motif, "m")
+    avec = dst2gcode.DstToGcode(dst2gcode.MachineConfig(bati_marge_mm=6.0))
+    g_avec = avec.convert(motif, "m")
+
+    pts_motif = [e for e in rejouer(g_sans) if e != "M0"]
+    pts = [e for e in rejouer(g_avec) if e != "M0"]
+    # Apres le bati, le premier point du motif est pique par la machine (sans
+    # bati, c'est le tour de volant de l'operateur) : un point de plus.
+    n_bati = len(pts) - len(pts_motif) - 1
+    bati, suite = pts[:n_bati], pts[n_bati + 1:]
+    x0, y0, x1, y1 = avec.bati
+    sur_le_bord = all(min(abs(x - x0), abs(x - x1), abs(y - y0), abs(y - y1)) < 0.02
+                      for x, y in bati)
+    source = [(cx / 10.0, -cy / 10.0) for cx, cy, c in motif.stitches
+              if (c & 0xFF) == pe.STITCH]
+    mx = [p[0] for p in source]
+    bon = verifier("bati brode en premier, sur son rectangle",
+                   n_bati > 10 and sur_le_bord, "%d points" % n_bati)
+    bon &= verifier("a 6 mm du motif",
+                    abs((min(mx) - x0) - 6) < 0.6 and abs((x1 - max(mx)) - 6) < 0.6,
+                    str(avec.bati))
+    bon &= verifier("le motif qui suit est inchange", suite == pts_motif,
+                    "%d / %d points" % (len(suite), len(pts_motif)))
+    bon &= verifier("aucun noeud sur le bati, aucune traversee vers le motif",
+                    avec.stats.tie_offs == sans.stats.tie_offs
+                    and avec.stats.traversees == sans.stats.traversees)
+    genres = [p["genre"] for p in avec.pauses]
+    bon &= verifier("une seule preparation du fil, au bati",
+                    genres.count("depart") == 1 and genres[0] == "depart", str(genres))
+
+    # Motif qui remplit le cadre : pas de place, pas de bati.
+    p = pe.EmbPattern()
+    for x in range(-800, 801, 25):
+        p.add_stitch_absolute(pe.STITCH, x, (550 if (x // 25) % 2 else -550))
+    p.end()
+    plein = dst2gcode.DstToGcode(dst2gcode.MachineConfig(bati_marge_mm=6.0))
+    plein.convert(p, "plein")
+    bon &= verifier("motif bord a bord : bati abandonne", plein.bati is None)
+    return bon
+
+
 def main() -> int:
     tout_bon = True
     tout_bon &= essai_changement_de_couleur()
@@ -733,6 +780,7 @@ def main() -> int:
     tout_bon &= essai_noeuds()
     tout_bon &= essai_premier_trou_apres_saut()
     tout_bon &= essai_cadence()
+    tout_bon &= essai_bati()
     tout_bon &= essai_calibration()
     tout_bon &= essai_estimation()
     tout_bon &= essai_bandeau_pendant_la_broderie()

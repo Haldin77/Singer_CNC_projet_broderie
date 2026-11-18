@@ -167,6 +167,18 @@ class MachineConfig:
     # et ces pauses disparaitront.
     pause_saut_mm: float = 20.0
 
+    # ---- Bati -------------------------------------------------------------
+    # Un rectangle de grands points autour du motif, brode EN PREMIER. Il
+    # coud le tissu a l'entoilage sur tout son pourtour : le tissu ne peut
+    # plus glisser entre les anneaux du cadre au fil des milliers de piqures
+    # -- c'est ce glissement qui le detend peu a peu, et qui decale la fin
+    # du motif par rapport au debut.
+    #
+    # Sans noeud d'arret, pour qu'on le retire en tirant le fil une fois la
+    # broderie finie. 0 = pas de bati ; sinon, ecart avec le motif, en mm.
+    bati_marge_mm: float = 0.0
+    bati_point_mm: float = 4.0
+
     # Marquer un arret au premier point pour laisser remonter le fil de
     # canette AU BON ENDROIT. Sans cela, on prepare le fil au centre du
     # cadre, la machine saute vers le premier point du motif, et le fil deja
@@ -349,6 +361,10 @@ class DstToGcode:
         # Vrai si l'aiguille a deja perce le tissu a la position courante.
         # Faux juste apres un saut : on y est arrive sans piquer.
         self._piqure_ici = False
+        # Rectangle du bati, s'il a ete brode ; et, jusqu'au premier point du
+        # motif, interdiction de broder une traversee depuis le bati.
+        self.bati: tuple | None = None
+        self._apres_bati = False
         # Compensation de flexion : derniere cible LOGIQUE emise, et
         # direction du dernier mouvement non nul (vecteur unitaire).
         self._cible = (0.0, 0.0)
@@ -534,6 +550,7 @@ class DstToGcode:
         self.piqures.append((x, y))
         self._fil_libre = False
         self._piqure_ici = True
+        self._apres_bati = False
         self.stats.stitches += 1
         self.points_depuis_saut += 1
         self.track_bbox(x, y)
@@ -673,6 +690,34 @@ class DstToGcode:
         bout d'une traversee.
         """
         dist = math.hypot(x - self.x, y - self.y)
+
+        if self._apres_bati:
+            # Du bati au motif : un saut franc. Une traversee brodee
+            # coudrait le motif au bati, qu'on ne pourrait plus retirer.
+            pause_pied = pause_pied and not self.cfg.servo_enabled
+            if pause_pied and self.cfg.pause_saut_mm > 0 and dist > self.cfg.pause_saut_mm:
+                self.noter_pause("pied-lever", "%.1f mm" % dist)
+                self.emit(self.cfg.pause_command)
+                self.stats.pauses_pied += 1
+            mx, my = self.vers_machine(x, y)
+            self._machine = (mx, my)
+            if self.relatif:
+                mots = self._mots_xy(*self._delta(mx, my))
+                if mots:
+                    self.emit("G0" + mots)
+            elif self.cfg.compact:
+                self.emit("G0X%sY%s" % (self.num(mx, 2), self.num(my, 2)))
+            else:
+                self.emit("G0 X%.4f Y%.4f" % (mx, my))
+            if pause_pied and self.cfg.pause_saut_mm > 0 and dist > self.cfg.pause_saut_mm:
+                self.noter_pause("pied-baisser")
+                self.emit(self.cfg.pause_command)
+            self.x, self.y = x, y
+            self._piqure_ici = False
+            self.stats.jumps += 1
+            self.track_bbox(x, y)
+            self.check_bounds(x, y)
+            return
 
         if self._fil_libre:
             # Juste apres un changement de couleur, le nouveau fil n'est
@@ -891,6 +936,47 @@ class DstToGcode:
 
     # -- entree depuis une image -------------------------------------------
 
+    def broder_bati(self, points: list) -> bool:
+        """Brode le bati autour de `points`, positions du motif en mm.
+
+        Le rectangle est pris a bati_marge_mm du motif, et ramene dans le
+        champ du cadre. S'il ne reste pas 2 mm entre lui et le motif, on
+        renonce : un bati qui chevauche le motif serait pris dedans.
+        Rend True si le bati a ete brode.
+        """
+        m = self.cfg.bati_marge_mm
+        if m <= 0 or not points:
+            return False
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        demi_x, demi_y = self.cfg.hoop_x / 2 - 1, self.cfg.hoop_y / 2 - 1
+        x0, x1 = max(min(xs) - m, -demi_x), min(max(xs) + m, demi_x)
+        y0, y1 = max(min(ys) - m, -demi_y), min(max(ys) + m, demi_y)
+        if min(min(xs) - x0, x1 - max(xs), min(ys) - y0, y1 - max(ys)) < 2.0:
+            return False
+
+        self.comment("; ---- BATI : a retirer en tirant le fil, une fois fini")
+        self.depart(x0, y0)
+        for x, y in ((x1, y0), (x1, y1), (x0, y1), (x0, y0)):
+            self.split_long_stitch(x, y, self.cfg.bati_point_mm)
+        # Pas de noeud au bout : il doit pouvoir s'enlever d'une traction.
+        self.point_precedent = None
+        self.points_depuis_saut = 0
+        self._apres_bati = True
+        self.bati = (x0, y0, x1, y1)
+        return True
+
+    def _rejoindre_premier_point(self, x: float, y: float) -> None:
+        """Premier point du motif : apres le bati, on y saute et l'on pique ;
+        sinon, c'est la que l'operateur prepare le fil."""
+        if self.bati:
+            if (abs(self.x - x) > 1e-9 or abs(self.y - y) > 1e-9
+                    or not self._apres_bati):
+                self.move_to(x, y)
+            self.split_long_stitch(x, y)
+        else:
+            self.depart(x, y)
+
     def convert_paths(self, trajets: list, src_name: str) -> str:
         """Genere le G-code a partir de polylignes deja echantillonnees.
 
@@ -904,6 +990,7 @@ class DstToGcode:
         machine saute sans piquer.
         """
         self.header(src_name)
+        self.broder_bati([p for t in trajets if len(t) >= 2 for p in t])
 
         premier = True
         for trajet in trajets:
@@ -912,7 +999,7 @@ class DstToGcode:
             # On rejoint le depart du trajet sans piquer. Au tout premier,
             # on s'arrete pour laisser preparer le fil sur place.
             if premier:
-                self.depart(trajet[0][0], trajet[0][1])
+                self._rejoindre_premier_point(trajet[0][0], trajet[0][1])
                 premier = False
             else:
                 self.move_to(trajet[0][0], trajet[0][1])
@@ -951,6 +1038,8 @@ class DstToGcode:
 
         stitches = pattern.stitches
         n = len(stitches)
+        self.broder_bati([to_mm(cx, cy) for cx, cy, cmd in stitches
+                          if (cmd & 0xFF) == pyembroidery.STITCH])
         first = True
         i = 0
         while i < n:
@@ -960,7 +1049,7 @@ class DstToGcode:
 
             if base == pyembroidery.STITCH:
                 if first:
-                    self.depart(x, y)
+                    self._rejoindre_premier_point(x, y)
                     first = False
                 else:
                     self.split_long_stitch(x, y)
