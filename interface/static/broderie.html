@@ -419,15 +419,15 @@
         </div>
         <div id="cal-messages"></div>
         <div class="soustitre" style="margin:14px 0 8px">
-          <b>Avance du cadre.</b> Le cadre se déplace pendant un tiers de tour
-          d'arbre. S'il n'a pas fini quand l'aiguille touche le tissu, les
-          points sont raccourcis, surtout sur les satins. Avancer ce
-          déplacement le fait finir plus tôt. Essaie 30, sur une chute.
+          <b>Moment où le cadre bouge.</b> Il doit partir une fois la pointe
+          de l'aiguille sortie du tissu, et avoir fini avant qu'elle y rentre.
+          S'il bouge trop tôt ou trop tard, les points sont raccourcis, surtout
+          sur les satins. Positif : plus tard. Négatif : plus tôt.
         </div>
         <div class="rangee" style="gap:8px">
-          <label>Avance (degrés, 0 à 60)
-            <input type="number" id="cal-avance" min="0" max="60" step="5"></label>
-          <button id="b-cal-avance">Enregistrer l'avance</button>
+          <label>Retard (degrés, -60 à 60)
+            <input type="number" id="cal-retard" min="-60" max="60" step="5"></label>
+          <button id="b-cal-retard">Enregistrer</button>
         </div>
       </details>
     </div>
@@ -922,7 +922,7 @@
     try {
       const d = await (await fetch("/api/calibration")).json();
       $("cal-actuelle").textContent = d.texte;
-      $("cal-avance").value = d.avance;
+      $("cal-retard").value = d.retard;
     } catch (e) { /* serveur absent : on laisse l'ancien texte */ }
   }
   majCalibration();
@@ -968,14 +968,14 @@
     }
   });
 
-  $("b-cal-avance").addEventListener("click", async () => {
-    const v = parseFloat($("cal-avance").value);
+  $("b-cal-retard").addEventListener("click", async () => {
+    const v = parseFloat($("cal-retard").value);
     try {
-      const d = await (await fetch("/api/calibration/avance", {
+      const d = await (await fetch("/api/calibration/retard", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({avance:v})})).json();
+        body:JSON.stringify({retard:v})})).json();
       messages("cal-messages", d.ok
-        ? [["succes", "Avance de " + d.avance + "° enregistrée. Elle s'applique "
+        ? [["succes", "Retard de " + d.retard + "° enregistré. Il s'applique "
             + "aux prochaines conversions : reconvertis ton motif."]]
         : [["erreur", d.erreur]]);
     } catch (e) {

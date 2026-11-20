@@ -133,29 +133,31 @@ def enregistrer_calibration(valeurs: dict) -> None:
                                    encoding="utf-8")
 
 
-def avance_fenetre() -> float:
-    """De combien de degres le deplacement du cadre est avance dans le tour.
+def retard_fenetre() -> float:
+    """De combien de degres le deplacement du cadre est decale dans le tour.
 
-    Le cadre bouge pendant 120 deg, a partir du point mort haut. Si
-    l'aiguille touche le tissu avant la fin de ce mouvement -- tissu epais,
-    entoilage, pied --, elle le saisit alors que le cadre n'est pas arrive :
-    le point est raccourci. C'est ce qu'a montre une reprise faite sans
-    homing : decalee d'environ 30 deg par accident, elle a donne des satins
-    de la bonne largeur, deux fois plus larges que ceux d'avant.
+    Positif : le cadre bouge PLUS TARD ; negatif : plus tot. Applique en
+    decalant la phase declaree a la carte, rien d'autre ne change.
 
-    Avancer la fenetre la fait commencer avant le point mort haut, aiguille
-    deja sortie du tissu, et finir d'autant plus tot. Applique en decalant
-    la phase declaree a la carte : rien d'autre ne change dans le G-code.
+    Le cadre bouge pendant 120 deg. Il doit partir une fois la pointe de
+    l'aiguille sortie du tissu, et s'arreter avant qu'elle y rentre. Trop
+    tot, il entraine le tissu avec l'aiguille qui remonte ; trop tard,
+    l'aiguille le saisit avant qu'il soit arrive. Dans les deux cas le point
+    est raccourci -- c'est ce qui rendait les satins deux fois trop fins,
+    jusqu'a une reprise faite sans homing qui a decale le tout par accident.
     """
+    f = _fichier_calibration()
     try:
-        return float(_fichier_calibration().get("avance_deg", 0.0))
+        if "retard_deg" in f:
+            return float(f["retard_deg"])
+        return -float(f.get("avance_deg", 0.0))
     except (TypeError, ValueError):
         return 0.0
 
 
 def phase_z() -> float:
-    """Decalage de phase a declarer a la carte : mesure + avance choisie."""
-    return DECALAGE_PHASE_Z_DEG - avance_fenetre()
+    """Decalage de phase a declarer a la carte : mesure + retard choisi."""
+    return DECALAGE_PHASE_Z_DEG + retard_fenetre()
 
 
 RE_ETAT = re.compile(r"<([A-Za-z]+)[|:]")
@@ -1056,23 +1058,23 @@ def _texte_calibration(c: dict) -> str:
 def api_calibration() -> object:
     c = calibration()
     return jsonify({"ok": True, "valeurs": c, "texte": _texte_calibration(c),
-                    "avance": avance_fenetre()})
+                    "retard": retard_fenetre()})
 
 
-@app.post("/api/calibration/avance")
-def api_calibration_avance() -> object:
-    """Avance de la fenetre de deplacement du cadre, en degres (0 a 60).
+@app.post("/api/calibration/retard")
+def api_calibration_retard() -> object:
+    """Decalage de la fenetre de deplacement du cadre, en degres (-60 a 60).
 
-    Au-dela de 60, le cadre commencerait a bouger alors que l'aiguille est
-    encore dans le tissu, a la remontee."""
+    Au-dela, le cadre bougerait aiguille dans le tissu, a la descente ou a
+    la remontee."""
     try:
-        avance = float((request.get_json(silent=True) or {}).get("avance"))
+        retard = float((request.get_json(silent=True) or {}).get("retard"))
     except (TypeError, ValueError):
-        avance = -1.0
-    if not 0.0 <= avance <= 60.0:
-        return jsonify({"ok": False, "erreur": "Entre 0 et 60 degres."}), 400
-    enregistrer_calibration({"avance_deg": avance})
-    return jsonify({"ok": True, "avance": avance})
+        retard = 999.0
+    if not -60.0 <= retard <= 60.0:
+        return jsonify({"ok": False, "erreur": "Entre -60 et 60 degres."}), 400
+    enregistrer_calibration({"retard_deg": retard})
+    return jsonify({"ok": True, "retard": retard})
 
 
 @app.post("/api/calibration/motif")
