@@ -116,28 +116,63 @@ def simuler(gcode, m):
     return total, par_bloc
 
 
+def reglages_yaml(chemin) -> dict:
+    """Les reglages de mouvement du fichier FluidNC, sans dependance YAML :
+    accelerations, vitesses max, planner_blocks, junction_deviation_mm."""
+    texte = open(chemin, encoding="utf-8").read()
+    r = {"blocs": 16, "jonction": 0.01}
+    m = re.search(r"^planner_blocks:\s*(\d+)", texte, re.M)
+    if m:
+        r["blocs"] = int(m.group(1))
+    m = re.search(r"^junction_deviation_mm:\s*([\d.]+)", texte, re.M)
+    if m:
+        r["jonction"] = float(m.group(1))
+    for axe in "xyz":
+        bloc = re.search(r"^  %s:\n((?:    .*\n|\s*\n|\s*#.*\n)+)" % axe, texte, re.M)
+        if not bloc:
+            continue
+        for cle, nom in (("acceleration_mm_per_sec2", "acc_"), ("max_rate_mm_per_min", "vmax_")):
+            m = re.search(r"^\s*%s:\s*([\d.]+)" % cle, bloc.group(1), re.M)
+            if m:
+                r[nom + axe] = float(m.group(1))
+    return r
+
+
 def main() -> int:
     import argparse, sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "postproc"))
+    racine = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(racine / "postproc"))
     import pyembroidery
     import dst2gcode
+    yaml = reglages_yaml(racine / "firmware" / "fluidnc-config.yaml")
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("motif")
     p.add_argument("--cadence", type=float, default=200.0)
     p.add_argument("--lissage", type=int, default=dst2gcode.MachineConfig.lissage_xy)
-    p.add_argument("--acc-xy", type=float, default=3000.0, help="mm/s2, comme le YAML")
-    p.add_argument("--acc-z", type=float, default=2000.0, help="deg/s2, comme le YAML")
-    p.add_argument("--jonction", type=float, default=0.01, help="junction_deviation_mm")
+    p.add_argument("--acc-xy", type=float, default=yaml.get("acc_x", 3000.0),
+                   help="mm/s2 (defaut : celle du YAML)")
+    p.add_argument("--acc-z", type=float, default=yaml.get("acc_z", 2000.0),
+                   help="deg/s2 (defaut : celle du YAML)")
+    p.add_argument("--jonction", type=float, default=yaml["jonction"],
+                   help="junction_deviation_mm (defaut : celle du YAML)")
+    p.add_argument("--blocs", type=int, default=yaml["blocs"],
+                   help="planner_blocks (defaut : celui du YAML)")
     a = p.parse_args()
     motif = pyembroidery.read(a.motif)
     motif.move_center_to_origin()
     conv = dst2gcode.DstToGcode(dst2gcode.MachineConfig(
         stitches_per_minute=a.cadence, lissage_xy=a.lissage))
     gcode = conv.convert(motif, a.motif)
-    _, blocs = simuler(gcode, Machine(acc=(a.acc_xy, a.acc_xy, a.acc_z), jd=a.jonction))
+    machine = Machine(acc=(a.acc_xy, a.acc_xy, a.acc_z),
+                      vmax=(yaml.get("vmax_x", 12000), yaml.get("vmax_y", 12000),
+                            yaml.get("vmax_z", 216000)),
+                      jd=a.jonction, blocs=a.blocs)
+    _, blocs = simuler(gcode, machine)
     t = sum(dt for b, dt in blocs if b["z"] > 0)
     n = conv.stats.stitches
+    print("Reglages : acceleration X/Y %.0f, Z %.0f, planner_blocks %d"
+          % (a.acc_xy, a.acc_z, a.blocs))
     print("%d points : %.1f min de broderie, soit %.0f points/min (demande : %.0f)"
           % (n, t, n / t, a.cadence))
     return 0

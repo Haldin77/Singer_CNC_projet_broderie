@@ -117,10 +117,45 @@ def calibration() -> dict:
     return valeurs
 
 
+def _fichier_calibration() -> dict:
+    try:
+        return json.loads(FICHIER_CALIBRATION.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def enregistrer_calibration(valeurs: dict) -> None:
+    """Met a jour les cles donnees, sans effacer les autres reglages."""
+    tout = _fichier_calibration()
+    tout.update(valeurs)
     DOSSIER_SORTIE.mkdir(parents=True, exist_ok=True)
-    FICHIER_CALIBRATION.write_text(json.dumps(valeurs, indent=2),
+    FICHIER_CALIBRATION.write_text(json.dumps(tout, indent=2),
                                    encoding="utf-8")
+
+
+def avance_fenetre() -> float:
+    """De combien de degres le deplacement du cadre est avance dans le tour.
+
+    Le cadre bouge pendant 120 deg, a partir du point mort haut. Si
+    l'aiguille touche le tissu avant la fin de ce mouvement -- tissu epais,
+    entoilage, pied --, elle le saisit alors que le cadre n'est pas arrive :
+    le point est raccourci. C'est ce qu'a montre une reprise faite sans
+    homing : decalee d'environ 30 deg par accident, elle a donne des satins
+    de la bonne largeur, deux fois plus larges que ceux d'avant.
+
+    Avancer la fenetre la fait commencer avant le point mort haut, aiguille
+    deja sortie du tissu, et finir d'autant plus tot. Applique en decalant
+    la phase declaree a la carte : rien d'autre ne change dans le G-code.
+    """
+    try:
+        return float(_fichier_calibration().get("avance_deg", 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def phase_z() -> float:
+    """Decalage de phase a declarer a la carte : mesure + avance choisie."""
+    return DECALAGE_PHASE_Z_DEG - avance_fenetre()
 
 
 RE_ETAT = re.compile(r"<([A-Za-z]+)[|:]")
@@ -638,7 +673,7 @@ def api_convertir() -> object:
         traversee_brodee_mm=traversee,
         pause_saut_mm=_flottant("pause_saut", 20.0),
         bati_marge_mm=BATI_MARGE_MM if request.form.get("bati") == "1" else 0.0,
-        decalage_phase_deg=DECALAGE_PHASE_Z_DEG, **calibration())
+        decalage_phase_deg=phase_z(), **calibration())
     conv = dst2gcode.DstToGcode(cfg)
     gcode = conv.convert_paths([t.points for t in resultat.trajets],
                                Path(fichier.filename).name)
@@ -887,7 +922,7 @@ def _convertir_broderie(fichier) -> object:
         traversee_brodee_mm=traversee,
         pause_saut_mm=_flottant("pause_saut", 20.0),
         bati_marge_mm=BATI_MARGE_MM if request.form.get("bati") == "1" else 0.0,
-        decalage_phase_deg=DECALAGE_PHASE_Z_DEG, **calibration())
+        decalage_phase_deg=phase_z(), **calibration())
     conv = dst2gcode.DstToGcode(cfg)
     gcode = conv.convert(motif, Path(fichier.filename).name)
 
@@ -1020,7 +1055,24 @@ def _texte_calibration(c: dict) -> str:
 @app.get("/api/calibration")
 def api_calibration() -> object:
     c = calibration()
-    return jsonify({"ok": True, "valeurs": c, "texte": _texte_calibration(c)})
+    return jsonify({"ok": True, "valeurs": c, "texte": _texte_calibration(c),
+                    "avance": avance_fenetre()})
+
+
+@app.post("/api/calibration/avance")
+def api_calibration_avance() -> object:
+    """Avance de la fenetre de deplacement du cadre, en degres (0 a 60).
+
+    Au-dela de 60, le cadre commencerait a bouger alors que l'aiguille est
+    encore dans le tissu, a la remontee."""
+    try:
+        avance = float((request.get_json(silent=True) or {}).get("avance"))
+    except (TypeError, ValueError):
+        avance = -1.0
+    if not 0.0 <= avance <= 60.0:
+        return jsonify({"ok": False, "erreur": "Entre 0 et 60 degres."}), 400
+    enregistrer_calibration({"avance_deg": avance})
+    return jsonify({"ok": True, "avance": avance})
 
 
 @app.post("/api/calibration/motif")
@@ -1041,7 +1093,7 @@ def api_calibration_motif() -> object:
         stitches_per_minute=cadence, hoop_x=CADRE_X, hoop_y=CADRE_Y,
         traversee_brodee_mm=0.0,
         pause_saut_mm=_flottant("pause_saut", 20.0),
-        decalage_phase_deg=DECALAGE_PHASE_Z_DEG,
+        decalage_phase_deg=phase_z(),
         **(calibration() if corrige else CALIBRATION_NEUTRE))
     conv = dst2gcode.DstToGcode(cfg)
     trajets = dst2gcode.motif_calibration()
@@ -1239,7 +1291,7 @@ def api_reprendre_au_point() -> object:
                         "la broderie depuis le debut."}), 400
     try:
         lignes, debut, (x, y) = programme_de_reprise(
-            motif_courant.get("gcode", ""), point, DECALAGE_PHASE_Z_DEG)
+            motif_courant.get("gcode", ""), point, phase_z())
     except ValueError as e:
         return jsonify({"ok": False, "erreur": "Reprise impossible : %s." % e}), 400
 

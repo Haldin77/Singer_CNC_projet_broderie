@@ -16,6 +16,15 @@
 name: "Brodeuse Singer CNC"
 board: "ESP32 DevKitC 38 broches"
 
+# Mouvements que FluidNC planifie a l'avance (16 par defaut, 120 au plus).
+# Il ne garde sa vitesse que s'il peut encore s'arreter net a la fin de ce
+# qu'il connait. Un point s'ecrit en 9 lignes (deplacement lisse + piqure) :
+# 16 blocs, c'est moins de deux points d'avance, et au-dela d'environ
+# 230 points/min il freine faute de visibilite. 64 blocs leve cette limite
+# (simule : 234 -> 297 points/min a 300 demandes, a accelerations egales).
+# Le prix : quelques ko de memoire, que l'ESP32 a.
+planner_blocks: 64
+
 stepping:
   engine: RMT
   # 255 = les moteurs restent alimentes en permanence. Indispensable ici :

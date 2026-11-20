@@ -418,6 +418,17 @@
           <button id="b-cal-zero">Remettre à zéro</button>
         </div>
         <div id="cal-messages"></div>
+        <div class="soustitre" style="margin:14px 0 8px">
+          <b>Avance du cadre.</b> Le cadre se déplace pendant un tiers de tour
+          d'arbre. S'il n'a pas fini quand l'aiguille touche le tissu, les
+          points sont raccourcis, surtout sur les satins. Avancer ce
+          déplacement le fait finir plus tôt. Essaie 30, sur une chute.
+        </div>
+        <div class="rangee" style="gap:8px">
+          <label>Avance (degrés, 0 à 60)
+            <input type="number" id="cal-avance" min="0" max="60" step="5"></label>
+          <button id="b-cal-avance">Enregistrer l'avance</button>
+        </div>
       </details>
     </div>
   </div>
@@ -911,6 +922,7 @@
     try {
       const d = await (await fetch("/api/calibration")).json();
       $("cal-actuelle").textContent = d.texte;
+      $("cal-avance").value = d.avance;
     } catch (e) { /* serveur absent : on laisse l'ancien texte */ }
   }
   majCalibration();
@@ -951,6 +963,21 @@
         msgs.push(["avert", "Renseigne les deux bandes d'un même axe (10 et 80 mm)."]);
       messages("cal-messages", msgs);
       $("cal-actuelle").textContent = d.texte;
+    } catch (e) {
+      messages("cal-messages", [["erreur", "Le serveur n'a pas répondu : " + e]]);
+    }
+  });
+
+  $("b-cal-avance").addEventListener("click", async () => {
+    const v = parseFloat($("cal-avance").value);
+    try {
+      const d = await (await fetch("/api/calibration/avance", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({avance:v})})).json();
+      messages("cal-messages", d.ok
+        ? [["succes", "Avance de " + d.avance + "° enregistrée. Elle s'applique "
+            + "aux prochaines conversions : reconvertis ton motif."]]
+        : [["erreur", d.erreur]]);
     } catch (e) {
       messages("cal-messages", [["erreur", "Le serveur n'a pas répondu : " + e]]);
     }
